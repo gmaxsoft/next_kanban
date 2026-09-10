@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Columns3, ListTodo, Plus, Users } from "lucide-react";
 
 import { requireAuth } from "@/lib/auth-utils";
+import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,29 +13,36 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-const stats = [
-  {
-    title: "Tablice",
-    value: "0",
-    description: "Aktywne tablice Kanban",
-    icon: Columns3,
-  },
-  {
-    title: "Zadania",
-    value: "0",
-    description: "Wszystkie karty na tablicach",
-    icon: ListTodo,
-  },
-  {
-    title: "Członkowie",
-    value: "0",
-    description: "Użytkownicy w przestrzeni",
-    icon: Users,
-  },
-];
-
 export default async function HomePage() {
   const session = await requireAuth();
+  const [boardCount, taskCount, userCount] = await Promise.all([
+    prisma.board.count(),
+    prisma.task.count(),
+    prisma.user.count(),
+  ]);
+
+  const stats = [
+    {
+      title: "Tablice",
+      value: String(boardCount),
+      description: "Aktywne tablice Kanban",
+      icon: Columns3,
+    },
+    {
+      title: "Zadania",
+      value: String(taskCount),
+      description: "Wszystkie karty na tablicach",
+      icon: ListTodo,
+    },
+    {
+      title: "Członkowie",
+      value: String(userCount),
+      description: "Użytkownicy w przestrzeni",
+      icon: Users,
+    },
+  ];
+
+  const isAdmin = session.user.role === "ADMIN";
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -49,7 +57,7 @@ export default async function HomePage() {
         </div>
         <Button render={<Link href="/boards" />}>
           <Plus />
-          Nowa tablica
+          {isAdmin ? "Nowa tablica" : "Przejdź do tablic"}
         </Button>
       </div>
 
