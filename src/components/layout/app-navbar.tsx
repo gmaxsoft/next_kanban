@@ -20,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { getInitials } from "@/lib/user";
 
 const pageTitles: Record<string, string> = {
@@ -66,6 +67,8 @@ export function AppNavbar({ user }: { user: Session["user"] }) {
         <Button variant="ghost" size="icon-sm" aria-label="Powiadomienia">
           <Bell />
         </Button>
+
+        <ThemeToggle />
 
         <DropdownMenu>
           <DropdownMenuTrigger

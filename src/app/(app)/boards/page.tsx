@@ -1,14 +1,9 @@
 import type { Metadata } from "next";
 import { Plus } from "lucide-react";
 
+import { KanbanBoard } from "@/components/kanban/kanban-board";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { sampleBoard } from "@/lib/kanban";
 
 export const metadata: Metadata = {
   title: "Tablice",
@@ -16,12 +11,13 @@ export const metadata: Metadata = {
 
 export default function BoardsPage() {
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Tablice</h2>
+    <div className="flex flex-1 flex-col gap-5 p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-semibold">Sprint — produkt</h2>
           <p className="text-sm text-muted-foreground">
-            Tutaj pojawią się Twoje tablice Kanban.
+            Kolumny i karty w palecie zinc z akcentem indigo. CRUD tablic dojdzie w
+            kolejnym kroku.
           </p>
         </div>
         <Button>
@@ -30,17 +26,7 @@ export default function BoardsPage() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Brak tablic</CardTitle>
-          <CardDescription>
-            Utwórz pierwszą tablicę, aby dodać kolumny i zadania.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          CRUD tablic zostanie dodany w kolejnym kroku.
-        </CardContent>
-      </Card>
+      <KanbanBoard columns={sampleBoard} />
     </div>
   );
 }

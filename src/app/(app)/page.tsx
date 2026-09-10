@@ -40,7 +40,7 @@ export default async function HomePage() {
     <div className="flex flex-1 flex-col gap-6 p-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">
+          <h2 className="text-2xl font-semibold">
             Witaj, {session.user.name}
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -55,7 +55,7 @@ export default async function HomePage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {stats.map((stat) => (
-          <Card key={stat.title}>
+          <Card key={stat.title} className="shadow-sm transition-all hover:shadow-md">
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
                 <CardTitle>{stat.title}</CardTitle>
