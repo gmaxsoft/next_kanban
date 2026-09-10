@@ -1,6 +1,13 @@
 import type { Priority } from "@prisma/client";
 
+export type BoardMember = {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+};
+
 export type BoardAssignee = {
+  id?: string;
   name: string;
   avatarUrl?: string | null;
 };
@@ -10,7 +17,28 @@ export type BoardTask = {
   title: string;
   description?: string;
   priority: Priority;
+  assigneeId?: string | null;
   assignee?: BoardAssignee;
+};
+
+export type TaskComment = {
+  id: string;
+  content: string;
+  createdAt: string;
+  author: BoardMember;
+};
+
+export type TaskDetails = {
+  id: string;
+  title: string;
+  description: string;
+  priority: Priority;
+  assigneeId: string | null;
+  columnTitle: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+  comments: TaskComment[];
 };
 
 export type BoardColumn = {

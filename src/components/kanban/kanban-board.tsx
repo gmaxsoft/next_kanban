@@ -16,9 +16,12 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 
+import { useRouter } from "next/navigation";
+
 import { moveTask } from "@/app/actions/boards";
 import { KanbanColumn } from "@/components/kanban/board-column";
 import { TaskCard } from "@/components/kanban/task-card";
+import { boardPath } from "@/lib/board-query";
 import type { BoardColumn, BoardTask } from "@/lib/kanban";
 
 function findColumnId(columns: BoardColumn[], id: UniqueIdentifier) {
@@ -147,10 +150,15 @@ function persistMove(boardId: string, columns: BoardColumn[], taskId: string) {
 export function KanbanBoard({
   boardId,
   columns: initialColumns,
+  q,
+  assignee,
 }: {
   boardId: string;
   columns: BoardColumn[];
+  q: string;
+  assignee: string;
 }) {
+  const router = useRouter();
   const [columns, setColumns] = useState(initialColumns);
   const [activeTask, setActiveTask] = useState<BoardTask | null>(null);
   const columnsRef = useRef(columns);
@@ -255,6 +263,10 @@ export function KanbanBoard({
     persistMove(boardId, next, activeId);
   }
 
+  function openTask(taskId: string) {
+    router.replace(boardPath(boardId, { q, assignee, taskId }));
+  }
+
   return (
     <DndContext
       sensors={sensors}
@@ -266,7 +278,12 @@ export function KanbanBoard({
     >
       <div className="flex min-h-[28rem] flex-1 gap-4 overflow-x-auto pb-2">
         {columns.map((column) => (
-          <KanbanColumn key={column.id} column={column} boardId={boardId} />
+          <KanbanColumn
+            key={column.id}
+            column={column}
+            boardId={boardId}
+            onOpenTask={openTask}
+          />
         ))}
       </div>
       <DragOverlay>

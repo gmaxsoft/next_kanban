@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -7,7 +8,13 @@ import { TaskCard } from "@/components/kanban/task-card";
 import type { BoardTask } from "@/lib/kanban";
 import { cn } from "@/lib/utils";
 
-export function SortableTaskCard({ task }: { task: BoardTask }) {
+export function SortableTaskCard({
+  task,
+  onOpen,
+}: {
+  task: BoardTask;
+  onOpen: (taskId: string) => void;
+}) {
   const {
     attributes,
     listeners,
@@ -16,6 +23,13 @@ export function SortableTaskCard({ task }: { task: BoardTask }) {
     transition,
     isDragging,
   } = useSortable({ id: task.id });
+  const suppressClickRef = useRef(false);
+
+  useEffect(() => {
+    if (isDragging) {
+      suppressClickRef.current = true;
+    }
+  }, [isDragging]);
 
   return (
     <div
@@ -30,6 +44,23 @@ export function SortableTaskCard({ task }: { task: BoardTask }) {
       )}
       {...attributes}
       {...listeners}
+      role="button"
+      tabIndex={0}
+      aria-label={`Otwórz zadanie ${task.title}`}
+      onClick={() => {
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false;
+          return;
+        }
+
+        onOpen(task.id);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen(task.id);
+        }
+      }}
     >
       <TaskCard task={task} />
     </div>

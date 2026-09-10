@@ -37,3 +37,28 @@ export const moveTaskSchema = z.object({
   toColumnId: z.string().uuid(),
   toIndex: z.number().int().min(0),
 });
+
+export const updateTaskSchema = z.object({
+  boardId: z.string().uuid(),
+  taskId: z.string().uuid(),
+  title: z
+    .string()
+    .trim()
+    .min(1, "Tytuł zadania jest wymagany")
+    .max(120, "Tytuł może mieć maksymalnie 120 znaków"),
+  description: z.string().max(10000, "Opis może mieć maksymalnie 10000 znaków"),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH"]),
+  assigneeId: z
+    .union([z.string().uuid(), z.literal(""), z.literal("unassigned")])
+    .optional(),
+});
+
+export const addCommentSchema = z.object({
+  boardId: z.string().uuid(),
+  taskId: z.string().uuid(),
+  content: z
+    .string()
+    .trim()
+    .min(1, "Komentarz nie może być pusty")
+    .max(2000, "Komentarz może mieć maksymalnie 2000 znaków"),
+});
