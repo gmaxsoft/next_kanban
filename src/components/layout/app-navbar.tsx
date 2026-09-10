@@ -26,6 +26,7 @@ import { getInitials } from "@/lib/user";
 const pageTitles: Record<string, string> = {
   "/": "Pulpit",
   "/boards": "Tablice",
+  "/chat": "Czat",
   "/settings": "Ustawienia",
   "/profile": "Profil",
   "/users": "Użytkownicy",

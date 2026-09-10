@@ -6,6 +6,7 @@ import {
   Columns3,
   KanbanSquare,
   LayoutDashboard,
+  MessageCircle,
   Settings,
   Users,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import {
 const navItems = [
   { title: "Pulpit", href: "/", icon: LayoutDashboard },
   { title: "Tablice", href: "/boards", icon: Columns3 },
+  { title: "Czat", href: "/chat", icon: MessageCircle },
   { title: "Ustawienia", href: "/settings", icon: Settings },
 ] as const;
 

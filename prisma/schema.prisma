@@ -34,6 +34,7 @@ model User {
   assignedTasks Task[]    @relation("TaskAssignee")
   createdTasks  Task[]    @relation("TaskCreator")
   comments      Comment[]
+  chatMessages  ChatMessage[]
 
   @@index([role])
 }
@@ -134,5 +135,17 @@ model Comment {
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
+  @@index([authorId])
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid()) @db.Char(36)
+  content   String   @db.Text
+  authorId  String   @db.Char(36)
+  createdAt DateTime @default(now())
+
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
   @@index([authorId])
 }
