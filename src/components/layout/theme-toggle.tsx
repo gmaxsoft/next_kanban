@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -39,18 +40,20 @@ export function ThemeToggle() {
         {mounted ? <TriggerIcon /> : <Sun />}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-40">
-        <DropdownMenuLabel>Motyw</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={mounted ? (theme ?? "system") : "system"}
-          onValueChange={(value) => setTheme(String(value))}
-        >
-          {themeOptions.map((option) => (
-            <DropdownMenuRadioItem key={option.value} value={option.value}>
-              <option.icon />
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Motyw</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={mounted ? (theme ?? "system") : "system"}
+            onValueChange={(value) => setTheme(String(value))}
+          >
+            {themeOptions.map((option) => (
+              <DropdownMenuRadioItem key={option.value} value={option.value}>
+                <option.icon />
+                {option.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

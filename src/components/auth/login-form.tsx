@@ -52,7 +52,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
               type="email"
               autoComplete="email"
               required
-              placeholder="admin@kanban.local"
+              placeholder="jan@firma.pl"
             />
           </div>
 

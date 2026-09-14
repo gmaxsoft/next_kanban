@@ -18,7 +18,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Hasło", type: "password" },
       },
       async authorize(credentials) {
-        const parsed = loginSchema.safeParse(credentials);
+        const parsed = loginSchema.safeParse({
+          email: String(credentials?.email ?? "")
+            .trim()
+            .toLowerCase(),
+          password: String(credentials?.password ?? ""),
+        });
 
         if (!parsed.success) {
           return null;
