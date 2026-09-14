@@ -2,13 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAuth } from "@/lib/auth-utils";
+import { requireAdmin, requireAuth } from "@/lib/auth-utils";
 import {
   notifyTaskAssigned,
   notifyTaskCommented,
 } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
-import { addCommentSchema, updateTaskSchema } from "@/lib/validations/board";
+import { normalizeRichTextInput } from "@/lib/rich-text";
+import {
+  addCommentSchema,
+  assignTaskSchema,
+  updateTaskSchema,
+} from "@/lib/validations/board";
 import { firstZodError } from "@/lib/validations/auth";
 
 export type TaskActionState = {
@@ -16,19 +21,147 @@ export type TaskActionState = {
   success?: string;
 } | null;
 
+async function replaceAssignees(taskId: string, assigneeIds: string[]) {
+  await prisma.$transaction([
+    prisma.taskAssignee.deleteMany({ where: { taskId } }),
+    ...(assigneeIds.length > 0
+      ? [
+          prisma.taskAssignee.createMany({
+            data: assigneeIds.map((userId) => ({ taskId, userId })),
+          }),
+        ]
+      : []),
+  ]);
+}
+
+export async function assignTask(
+  _prevState: TaskActionState,
+  formData: FormData,
+): Promise<TaskActionState> {
+  const session = await requireAdmin();
+  const description = normalizeRichTextInput(
+    String(formData.get("description") ?? ""),
+  );
+  const assigneeIds = formData
+    .getAll("assigneeIds")
+    .map((value) => String(value))
+    .filter(Boolean);
+
+  const parsed = assignTaskSchema.safeParse({
+    teamId: String(formData.get("teamId") ?? ""),
+    boardId: String(formData.get("boardId") ?? ""),
+    columnId: String(formData.get("columnId") ?? ""),
+    title: String(formData.get("title") ?? ""),
+    description: description || undefined,
+    priority: formData.get("priority") || "MEDIUM",
+    assigneeIds,
+    dueDate: String(formData.get("dueDate") ?? ""),
+  });
+
+  if (!parsed.success) {
+    return { error: firstZodError(parsed.error) };
+  }
+
+  const column = await prisma.column.findUnique({
+    where: { id: parsed.data.columnId },
+    select: {
+      id: true,
+      boardId: true,
+      board: { select: { title: true, teamId: true } },
+    },
+  });
+
+  if (
+    !column ||
+    column.boardId !== parsed.data.boardId ||
+    column.board.teamId !== parsed.data.teamId
+  ) {
+    return { error: "Nie znaleziono statusu na wybranej tablicy zespołu." };
+  }
+
+  const assignees = await prisma.user.findMany({
+    where: {
+      id: { in: parsed.data.assigneeIds },
+      isActive: true,
+      teamId: parsed.data.teamId,
+    },
+    select: { id: true, name: true, email: true },
+  });
+
+  if (assignees.length !== parsed.data.assigneeIds.length) {
+    return {
+      error: "Możesz przypisać tylko aktywnych członków wybranego zespołu.",
+    };
+  }
+
+  const aggregate = await prisma.task.aggregate({
+    where: { columnId: column.id },
+    _max: { order: true },
+  });
+
+  const task = await prisma.task.create({
+    data: {
+      title: parsed.data.title,
+      description: parsed.data.description,
+      priority: parsed.data.priority,
+      order: (aggregate._max.order ?? -1) + 1,
+      columnId: column.id,
+      createdById: session.user.id,
+      dueDate: new Date(parsed.data.dueDate),
+      assignments: {
+        create: parsed.data.assigneeIds.map((userId) => ({ userId })),
+      },
+    },
+    select: { id: true },
+  });
+
+  const actorName = session.user.name ?? session.user.email ?? "Administrator";
+
+  for (const assignee of assignees) {
+    if (assignee.id === session.user.id) {
+      continue;
+    }
+
+    notifyTaskAssigned({
+      toEmail: assignee.email,
+      assigneeName: assignee.name,
+      actorName,
+      taskTitle: parsed.data.title,
+      boardTitle: column.board.title,
+      boardId: column.boardId,
+      taskId: task.id,
+    });
+  }
+
+  revalidatePath("/");
+  revalidatePath("/boards");
+  revalidatePath("/tasks");
+  revalidatePath(`/boards/${column.boardId}`);
+
+  return { success: "Przydzielono zadanie załodze." };
+}
+
 export async function updateTask(
   _prevState: TaskActionState,
   formData: FormData,
 ): Promise<TaskActionState> {
   const session = await requireAuth();
+  const isAdmin = session.user.isAdmin;
+  const assigneeIds = formData
+    .getAll("assigneeIds")
+    .map((value) => String(value))
+    .filter(Boolean);
 
   const parsed = updateTaskSchema.safeParse({
     boardId: String(formData.get("boardId") ?? ""),
     taskId: String(formData.get("taskId") ?? ""),
     title: String(formData.get("title") ?? ""),
-    description: String(formData.get("description") ?? ""),
+    description: normalizeRichTextInput(
+      String(formData.get("description") ?? ""),
+    ),
     priority: String(formData.get("priority") ?? ""),
-    assigneeId: String(formData.get("assigneeId") ?? ""),
+    assigneeIds: isAdmin ? assigneeIds : undefined,
+    dueDate: isAdmin ? String(formData.get("dueDate") ?? "") : undefined,
   });
 
   if (!parsed.success) {
@@ -43,13 +176,13 @@ export async function updateTask(
     select: {
       id: true,
       title: true,
-      assigneeId: true,
       column: {
         select: {
           boardId: true,
-          board: { select: { title: true } },
+          board: { select: { title: true, teamId: true } },
         },
       },
+      assignments: { select: { userId: true } },
     },
   });
 
@@ -57,21 +190,29 @@ export async function updateTask(
     return { error: "Nie znaleziono zadania na tej tablicy." };
   }
 
-  const assigneeId =
-    !parsed.data.assigneeId || parsed.data.assigneeId === "unassigned"
-      ? null
-      : parsed.data.assigneeId;
+  const previousAssigneeIds = new Set(
+    task.assignments.map((assignment) => assignment.userId),
+  );
 
-  const assignee =
-    assigneeId === null
-      ? null
-      : await prisma.user.findUnique({
-          where: { id: assigneeId },
-          select: { id: true, name: true, email: true },
-        });
+  let nextAssignees:
+    | { id: string; name: string; email: string }[]
+    | null = null;
 
-  if (assigneeId && !assignee) {
-    return { error: "Nie znaleziono przypisanego użytkownika." };
+  if (isAdmin && parsed.data.assigneeIds) {
+    nextAssignees = await prisma.user.findMany({
+      where: {
+        id: { in: parsed.data.assigneeIds },
+        isActive: true,
+        teamId: task.column.board.teamId,
+      },
+      select: { id: true, name: true, email: true },
+    });
+
+    if (nextAssignees.length !== parsed.data.assigneeIds.length) {
+      return {
+        error: "Możesz przypisać tylko aktywnych członków zespołu tablicy.",
+      };
+    }
   }
 
   await prisma.task.update({
@@ -80,27 +221,45 @@ export async function updateTask(
       title: parsed.data.title,
       description: parsed.data.description.trim() || null,
       priority: parsed.data.priority,
-      assigneeId,
+      ...(isAdmin && parsed.data.dueDate !== undefined
+        ? {
+            dueDate: parsed.data.dueDate
+              ? new Date(parsed.data.dueDate)
+              : null,
+          }
+        : {}),
     },
   });
 
-  const assignedSomeoneNew =
-    Boolean(assignee) && assigneeId !== task.assigneeId;
+  if (isAdmin && parsed.data.assigneeIds && nextAssignees) {
+    await replaceAssignees(task.id, parsed.data.assigneeIds);
 
-  if (assignedSomeoneNew && assignee && assignee.id !== session.user.id) {
-    notifyTaskAssigned({
-      toEmail: assignee.email,
-      assigneeName: assignee.name,
-      actorName: session.user.name ?? session.user.email ?? "Ktoś z zespołu",
-      taskTitle: parsed.data.title,
-      boardTitle: task.column.board.title,
-      boardId: task.column.boardId,
-      taskId: task.id,
-    });
+    const actorName =
+      session.user.name ?? session.user.email ?? "Ktoś z zespołu";
+
+    for (const assignee of nextAssignees) {
+      if (
+        previousAssigneeIds.has(assignee.id) ||
+        assignee.id === session.user.id
+      ) {
+        continue;
+      }
+
+      notifyTaskAssigned({
+        toEmail: assignee.email,
+        assigneeName: assignee.name,
+        actorName,
+        taskTitle: parsed.data.title,
+        boardTitle: task.column.board.title,
+        boardId: task.column.boardId,
+        taskId: task.id,
+      });
+    }
   }
 
   revalidatePath("/");
   revalidatePath("/boards");
+  revalidatePath("/tasks");
   revalidatePath(`/boards/${parsed.data.boardId}`);
 
   return { success: "Zapisano zmiany w zadaniu." };
@@ -130,8 +289,11 @@ export async function addComment(
     select: {
       id: true,
       title: true,
-      assigneeId: true,
-      assignee: { select: { id: true, name: true, email: true } },
+      assignments: {
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+        },
+      },
       column: {
         select: {
           boardId: true,
@@ -153,11 +315,17 @@ export async function addComment(
     },
   });
 
-  if (task.assignee && task.assignee.id !== session.user.id) {
+  const actorName = session.user.name ?? session.user.email ?? "Ktoś z zespołu";
+
+  for (const assignment of task.assignments) {
+    if (assignment.user.id === session.user.id) {
+      continue;
+    }
+
     notifyTaskCommented({
-      toEmail: task.assignee.email,
-      assigneeName: task.assignee.name,
-      actorName: session.user.name ?? session.user.email ?? "Ktoś z zespołu",
+      toEmail: assignment.user.email,
+      assigneeName: assignment.user.name,
+      actorName,
       taskTitle: task.title,
       boardTitle: task.column.board.title,
       comment: parsed.data.content,

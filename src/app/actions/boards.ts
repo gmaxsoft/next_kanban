@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { requireAuth } from "@/lib/auth-utils";
 import { prisma } from "@/lib/prisma";
+import { normalizeRichTextInput } from "@/lib/rich-text";
 import {
   createBoardSchema,
   createTaskSchema,
@@ -23,12 +24,13 @@ export async function createBoard(
 ): Promise<BoardActionState> {
   const session = await requireAuth();
 
-  if (session.user.role !== "ADMIN") {
-    return { error: "Tylko administrator może tworzyć tablice." };
+  if (!session.user.isAdmin) {
+    return { error: "Tylko ADMINISTRATOR może tworzyć tablice." };
   }
 
   const parsed = createBoardSchema.safeParse({
     title: String(formData.get("title") ?? ""),
+    teamId: String(formData.get("teamId") ?? ""),
     columns: formData
       .getAll("column")
       .map((value) => String(value).trim())
@@ -39,9 +41,19 @@ export async function createBoard(
     return { error: firstZodError(parsed.error) };
   }
 
+  const team = await prisma.team.findUnique({
+    where: { id: parsed.data.teamId },
+    select: { id: true },
+  });
+
+  if (!team) {
+    return { error: "Nie znaleziono wybranego zespołu." };
+  }
+
   const board = await prisma.board.create({
     data: {
       title: parsed.data.title,
+      teamId: parsed.data.teamId,
       createdById: session.user.id,
       columns: {
         create: parsed.data.columns.map((title, order) => ({
@@ -63,7 +75,18 @@ export async function createTask(
   formData: FormData,
 ): Promise<BoardActionState> {
   const session = await requireAuth();
-  const description = String(formData.get("description") ?? "").trim();
+
+  if (!session.user.isAdmin) {
+    return { error: "Tylko ADMINISTRATOR może dodawać zadania." };
+  }
+
+  const description = normalizeRichTextInput(
+    String(formData.get("description") ?? ""),
+  );
+  const assigneeIds = formData
+    .getAll("assigneeIds")
+    .map((value) => String(value))
+    .filter(Boolean);
 
   const parsed = createTaskSchema.safeParse({
     boardId: String(formData.get("boardId") ?? ""),
@@ -71,6 +94,8 @@ export async function createTask(
     title: String(formData.get("title") ?? ""),
     description: description || undefined,
     priority: formData.get("priority") || "MEDIUM",
+    assigneeIds,
+    dueDate: String(formData.get("dueDate") ?? ""),
   });
 
   if (!parsed.success) {
@@ -79,11 +104,31 @@ export async function createTask(
 
   const column = await prisma.column.findUnique({
     where: { id: parsed.data.columnId },
-    select: { id: true, boardId: true },
+    select: {
+      id: true,
+      boardId: true,
+      board: { select: { teamId: true } },
+    },
   });
 
   if (!column || column.boardId !== parsed.data.boardId) {
     return { error: "Nie znaleziono kolumny na tej tablicy." };
+  }
+
+  if (parsed.data.assigneeIds.length > 0) {
+    const users = await prisma.user.count({
+      where: {
+        id: { in: parsed.data.assigneeIds },
+        isActive: true,
+        teamId: column.board.teamId,
+      },
+    });
+
+    if (users !== parsed.data.assigneeIds.length) {
+      return {
+        error: "Możesz przypisać tylko aktywnych członków zespołu tablicy.",
+      };
+    }
   }
 
   const aggregate = await prisma.task.aggregate({
@@ -99,11 +144,19 @@ export async function createTask(
       order: (aggregate._max.order ?? -1) + 1,
       columnId: column.id,
       createdById: session.user.id,
+      dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+      assignments:
+        parsed.data.assigneeIds.length > 0
+          ? {
+              create: parsed.data.assigneeIds.map((userId) => ({ userId })),
+            }
+          : undefined,
     },
   });
 
   revalidatePath("/");
   revalidatePath("/boards");
+  revalidatePath("/tasks");
   revalidatePath(`/boards/${column.boardId}`);
 
   return { success: "Dodano zadanie." };

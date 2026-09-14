@@ -7,7 +7,7 @@ import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { boardPath } from "@/lib/board-query";
+import { boardPath, type BoardView } from "@/lib/board-query";
 import type { BoardMember } from "@/lib/kanban";
 
 const selectClassName =
@@ -18,12 +18,14 @@ export function BoardFilters({
   q,
   assignee,
   taskId,
+  view,
   members,
 }: {
   boardId: string;
   q: string;
   assignee: string;
   taskId: string;
+  view: BoardView;
   members: BoardMember[];
 }) {
   const router = useRouter();
@@ -38,6 +40,7 @@ export function BoardFilters({
           q: next.q ?? query,
           assignee: next.assignee ?? assignee,
           taskId,
+          view,
         }),
       );
     });
@@ -52,7 +55,7 @@ export function BoardFilters({
 
     debounceRef.current = window.setTimeout(() => {
       startTransition(() => {
-        router.replace(boardPath(boardId, { q: value, assignee, taskId }));
+        router.replace(boardPath(boardId, { q: value, assignee, taskId, view }));
       });
     }, 350);
   }
@@ -108,7 +111,7 @@ export function BoardFilters({
             }
             setQuery("");
             startTransition(() => {
-              router.replace(boardPath(boardId, { taskId }));
+              router.replace(boardPath(boardId, { taskId, view }));
             });
           }}
         >

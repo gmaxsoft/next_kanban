@@ -1,39 +1,34 @@
 "use client";
 
 import { useActionState } from "react";
-import { AlertCircleIcon, CheckCircle2Icon } from "lucide-react";
 
 import { createUser, type AuthActionState } from "@/app/actions/auth";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useActionToast } from "@/hooks/use-action-toast";
+import { SYSTEM_USER_ROLE_ID } from "@/lib/rbac";
 
 const selectClassName =
   "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
-export function CreateUserForm() {
+export function CreateUserForm({
+  roles,
+  teams,
+  defaultTeamId,
+}: {
+  roles: { id: string; name: string }[];
+  teams: { id: string; name: string }[];
+  defaultTeamId?: string | null;
+}) {
   const [state, formAction, pending] = useActionState<AuthActionState, FormData>(
     createUser,
     null,
   );
+  useActionToast(state);
 
   return (
     <form action={formAction} className="grid gap-4 sm:grid-cols-2">
-      {state?.error ? (
-        <Alert variant="destructive" className="sm:col-span-2">
-          <AlertCircleIcon />
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {state?.success ? (
-        <Alert className="sm:col-span-2">
-          <CheckCircle2Icon />
-          <AlertDescription>{state.success}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <div className="grid gap-2">
         <Label htmlFor="name">Imię i nazwisko</Label>
         <Input id="name" name="name" required placeholder="Anna Kowalska" />
@@ -63,10 +58,35 @@ export function CreateUserForm() {
       </div>
 
       <div className="grid gap-2">
-        <Label htmlFor="role">Rola</Label>
-        <select id="role" name="role" defaultValue="USER" className={selectClassName}>
-          <option value="USER">USER</option>
-          <option value="ADMIN">ADMIN</option>
+        <Label htmlFor="roleId">Rola</Label>
+        <select
+          id="roleId"
+          name="roleId"
+          defaultValue={SYSTEM_USER_ROLE_ID}
+          className={selectClassName}
+        >
+          {roles.map((role) => (
+            <option key={role.id} value={role.id}>
+              {role.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid gap-2 sm:col-span-2">
+        <Label htmlFor="teamId">Zespół</Label>
+        <select
+          id="teamId"
+          name="teamId"
+          defaultValue={defaultTeamId ?? ""}
+          className={selectClassName}
+        >
+          <option value="">Bez zespołu</option>
+          {teams.map((team) => (
+            <option key={team.id} value={team.id}>
+              {team.name}
+            </option>
+          ))}
         </select>
       </div>
 

@@ -11,10 +11,12 @@ import { cn } from "@/lib/utils";
 export function KanbanColumn({
   column,
   boardId,
+  canCreateTasks,
   onOpenTask,
 }: {
   column: BoardColumn;
   boardId: string;
+  canCreateTasks: boolean;
   onOpenTask: (taskId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
@@ -22,7 +24,7 @@ export function KanbanColumn({
   return (
     <section
       className={cn(
-        "flex w-80 shrink-0 flex-col rounded-xl bg-muted/50 p-3",
+        "flex min-h-[28rem] min-w-72 flex-1 basis-0 flex-col bg-muted/50 p-3",
         isOver && "ring-2 ring-primary/30",
       )}
     >
@@ -47,7 +49,9 @@ export function KanbanColumn({
         </SortableContext>
       </div>
 
-      <AddTaskForm boardId={boardId} columnId={column.id} />
+      {canCreateTasks ? (
+        <AddTaskForm boardId={boardId} columnId={column.id} />
+      ) : null}
     </section>
   );
 }

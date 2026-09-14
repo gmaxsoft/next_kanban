@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 
+import { requireAuth } from "@/lib/auth-utils";
+import { prisma } from "@/lib/prisma";
+import { AvatarUploadForm } from "@/components/auth/avatar-upload-form";
 import { ChangePasswordForm } from "@/components/auth/change-password-form";
 import {
   Card,
@@ -8,8 +11,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { requireAuth } from "@/lib/auth-utils";
-import { getInitials } from "@/lib/user";
 
 export const metadata: Metadata = {
   title: "Profil",
@@ -17,16 +18,41 @@ export const metadata: Metadata = {
 
 export default async function ProfilePage() {
   const session = await requireAuth();
-  const initials = getInitials(session.user.name);
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      name: true,
+      email: true,
+      avatarUrl: true,
+      role: { select: { name: true } },
+      team: { select: { name: true } },
+    },
+  });
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Profil</h2>
         <p className="text-sm text-muted-foreground">
-          Dane konta i zmiana hasła.
+          Zdjęcie, dane konta i zmiana hasła.
         </p>
       </div>
+
+      <Card className="max-w-xl">
+        <CardHeader>
+          <CardTitle>Zdjęcie profilowe</CardTitle>
+          <CardDescription>
+            Twoja awatar będzie widoczny w czacie, navbarze i przy zadaniach.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AvatarUploadForm name={user.name} image={user.avatarUrl} />
+        </CardContent>
+      </Card>
 
       <Card className="max-w-xl">
         <CardHeader>
@@ -34,20 +60,21 @@ export default async function ProfilePage() {
           <CardDescription>Konto przypisane do Twojej sesji.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted font-medium">
-            {initials}
-          </div>
           <p>
             <span className="text-muted-foreground">Imię: </span>
-            {session.user.name}
+            {user.name}
           </p>
           <p>
             <span className="text-muted-foreground">E-mail: </span>
-            {session.user.email}
+            {user.email}
           </p>
           <p>
             <span className="text-muted-foreground">Rola: </span>
-            {session.user.role}
+            {user.role.name}
+          </p>
+          <p>
+            <span className="text-muted-foreground">Zespół: </span>
+            {user.team?.name ?? "—"}
           </p>
         </CardContent>
       </Card>

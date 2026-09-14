@@ -6,12 +6,14 @@ import {
   Columns3,
   KanbanSquare,
   LayoutDashboard,
+  ListTodo,
   MessageCircle,
   Settings,
   Users,
 } from "lucide-react";
 import type { Session } from "next-auth";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sidebar,
   SidebarContent,
@@ -25,17 +27,27 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { getInitials } from "@/lib/user";
 
-const navItems = [
+type NavItem = {
+  title: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  adminOnly?: boolean;
+};
+
+const navItems: NavItem[] = [
   { title: "Pulpit", href: "/", icon: LayoutDashboard },
+  { title: "Zadania", href: "/tasks", icon: ListTodo, adminOnly: true },
   { title: "Tablice", href: "/boards", icon: Columns3 },
   { title: "Czat", href: "/chat", icon: MessageCircle },
   { title: "Ustawienia", href: "/settings", icon: Settings },
-] as const;
+  { title: "Użytkownicy", href: "/users", icon: Users },
+];
 
 export function AppSidebar({ user }: { user: Session["user"] }) {
   const pathname = usePathname();
-  const isAdmin = user.role === "ADMIN";
+  const isAdmin = user.isAdmin;
 
   return (
     <Sidebar collapsible="icon">
@@ -66,37 +78,27 @@ export function AppSidebar({ user }: { user: Session["user"] }) {
           <SidebarGroupLabel>Nawigacja</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
+              {navItems
+                .filter((item) => !item.adminOnly || isAdmin)
+                .map((item) => {
+                  const isActive =
+                    item.href === "/"
+                      ? pathname === "/"
+                      : pathname.startsWith(item.href);
 
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      tooltip={item.title}
-                      render={<Link href={item.href} />}
-                    >
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-              {isAdmin ? (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={pathname.startsWith("/users")}
-                    tooltip="Użytkownicy"
-                    render={<Link href="/users" />}
-                  >
-                    <Users />
-                    <span>Użytkownicy</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ) : null}
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        isActive={isActive}
+                        tooltip={item.title}
+                        render={<Link href={item.href} />}
+                      >
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -106,7 +108,12 @@ export function AppSidebar({ user }: { user: Session["user"] }) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton tooltip="Profil" render={<Link href="/profile" />}>
-              <Settings />
+              <Avatar size="sm" className="size-4">
+                <AvatarImage src={user.image ?? undefined} alt={user.name ?? "Profil"} />
+                <AvatarFallback className="text-[8px]">
+                  {getInitials(user.name)}
+                </AvatarFallback>
+              </Avatar>
               <span>{user.name ?? "Profil"}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>

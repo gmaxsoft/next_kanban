@@ -4,8 +4,10 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { BoardFilters } from "@/components/kanban/board-filters";
+import { BoardViewTabs } from "@/components/kanban/board-view-tabs";
 import { KanbanBoard } from "@/components/kanban/kanban-board";
 import { TaskDetailsSheet } from "@/components/kanban/task-details-sheet";
+import { TaskListView } from "@/components/kanban/task-list-view";
 import { Button } from "@/components/ui/button";
 import { requireAuth } from "@/lib/auth-utils";
 import { boardPath, parseBoardSearch } from "@/lib/board-query";
@@ -22,6 +24,7 @@ type BoardPageProps = {
     q?: string | string[];
     assignee?: string | string[];
     task?: string | string[];
+    view?: string | string[];
   }>;
 };
 
@@ -37,28 +40,34 @@ export async function generateMetadata({
 }
 
 export default async function BoardPage({ params, searchParams }: BoardPageProps) {
-  await requireAuth();
+  const session = await requireAuth();
   const { boardId } = await params;
-  const { q, assignee, taskId } = parseBoardSearch(await searchParams);
+  const { q, assignee, taskId, view } = parseBoardSearch(await searchParams);
+  const canCreateTasks = session.user.isAdmin;
 
-  const [board, members, selectedTask] = await Promise.all([
-    getBoardWithColumns(boardId, { q, assignee }),
-    listBoardMembers(),
-    taskId ? getTaskDetails(boardId, taskId) : Promise.resolve(null),
-  ]);
+  const board = await getBoardWithColumns(boardId, { q, assignee });
 
   if (!board) {
     notFound();
   }
 
+  const [members, selectedTask] = await Promise.all([
+    listBoardMembers(board.teamId),
+    taskId ? getTaskDetails(boardId, taskId) : Promise.resolve(null),
+  ]);
+
   const columns = mapBoardColumns(board);
   const boardKey = [
+    view,
     q,
     assignee,
     ...columns.flatMap((column) => column.tasks.map((task) => task.id)),
   ]
     .sort()
     .join(",");
+
+  const emptyFiltered =
+    (q || assignee) && columns.every((column) => column.tasks.length === 0);
 
   return (
     <div className="flex flex-1 flex-col gap-5 p-6">
@@ -75,10 +84,22 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           </Button>
           <h2 className="text-2xl font-semibold">{board.title}</h2>
           <p className="text-sm text-muted-foreground">
-            Kliknij kartę, aby otworzyć szczegóły. Przeciągnij, żeby zmienić kolumnę
-            albo kolejność.
+            Zespół: {board.team.name}.{" "}
+            {view === "list"
+              ? "Widok listy — kliknij wiersz, aby otworzyć szczegóły zadania."
+              : "Widok tablicy — kliknij kartę, przeciągnij między kolumnami."}
+            {!canCreateTasks
+              ? " Dodawanie zadań jest dostępne tylko dla ADMINISTRATORA."
+              : null}
           </p>
         </div>
+        <BoardViewTabs
+          boardId={board.id}
+          view={view}
+          q={q}
+          assignee={assignee}
+          taskId={taskId}
+        />
       </div>
 
       <BoardFilters
@@ -86,28 +107,42 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
         q={q}
         assignee={assignee}
         taskId={taskId}
+        view={view}
         members={members}
       />
 
-      {(q || assignee) && columns.every((column) => column.tasks.length === 0) ? (
+      {emptyFiltered ? (
         <p className="text-sm text-muted-foreground">
           Brak zadań pasujących do filtrów.
         </p>
       ) : null}
 
-      <KanbanBoard
-        key={boardKey}
-        boardId={board.id}
-        columns={columns}
-        q={q}
-        assignee={assignee}
-      />
+      {view === "list" ? (
+        <TaskListView
+          boardId={board.id}
+          columns={columns}
+          q={q}
+          assignee={assignee}
+          view={view}
+        />
+      ) : (
+        <KanbanBoard
+          key={boardKey}
+          boardId={board.id}
+          columns={columns}
+          q={q}
+          assignee={assignee}
+          view={view}
+          canCreateTasks={canCreateTasks}
+        />
+      )}
 
       <TaskDetailsSheet
         boardId={board.id}
         task={selectedTask}
         members={members}
-        closeHref={boardPath(board.id, { q, assignee })}
+        canManageAssignments={canCreateTasks}
+        closeHref={boardPath(board.id, { q, assignee, view })}
       />
     </div>
   );

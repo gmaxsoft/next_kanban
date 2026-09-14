@@ -2,15 +2,14 @@
 
 import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircleIcon, CheckCircle2Icon } from "lucide-react";
 
 import { updateTask, type TaskActionState } from "@/app/actions/tasks";
 import { TaskComments } from "@/components/kanban/task-comments";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import {
   Sheet,
   SheetContent,
@@ -18,7 +17,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Textarea } from "@/components/ui/textarea";
+import { useActionToast } from "@/hooks/use-action-toast";
 import type { BoardMember, TaskDetails } from "@/lib/kanban";
 
 const selectClassName =
@@ -35,15 +34,18 @@ function TaskDetailsBody({
   boardId,
   task,
   members,
+  canManageAssignments,
 }: {
   boardId: string;
   task: TaskDetails;
   members: BoardMember[];
+  canManageAssignments: boolean;
 }) {
   const [state, formAction, pending] = useActionState<TaskActionState, FormData>(
     updateTask,
     null,
   );
+  useActionToast(state);
 
   return (
     <>
@@ -59,20 +61,6 @@ function TaskDetailsBody({
         <form action={formAction} className="grid gap-4">
           <input type="hidden" name="boardId" value={boardId} />
           <input type="hidden" name="taskId" value={task.id} />
-
-          {state?.error ? (
-            <Alert variant="destructive">
-              <AlertCircleIcon />
-              <AlertDescription>{state.error}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          {state?.success ? (
-            <Alert>
-              <CheckCircle2Icon />
-              <AlertDescription>{state.success}</AlertDescription>
-            </Alert>
-          ) : null}
 
           <div className="grid gap-2">
             <Label htmlFor="task-title">Tytuł</Label>
@@ -102,38 +90,69 @@ function TaskDetailsBody({
               </select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="task-assignee">Przypisany programista</Label>
-              <select
-                id="task-assignee"
-                name="assigneeId"
-                defaultValue={task.assigneeId ?? ""}
-                className={selectClassName}
-                key={`${task.id}-assignee-${task.updatedAt}`}
-              >
-                <option value="">Nieprzypisane</option>
-                {members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name}
-                  </option>
-                ))}
-              </select>
+              <Label htmlFor="task-due">Termin wykonania</Label>
+              {canManageAssignments ? (
+                <Input
+                  id="task-due"
+                  name="dueDate"
+                  type="date"
+                  defaultValue={task.dueDate ?? ""}
+                  key={`${task.id}-due-${task.updatedAt}`}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {task.dueDate
+                    ? new Date(task.dueDate).toLocaleDateString("pl-PL", {
+                        dateStyle: "medium",
+                      })
+                    : "Brak terminu"}
+                </p>
+              )}
             </div>
           </div>
 
+          <fieldset className="grid gap-2">
+            <legend className="mb-1 text-sm font-medium">Przypisana załoga</legend>
+            {canManageAssignments ? (
+              <div
+                className="grid max-h-40 gap-2 overflow-y-auto border border-border p-3"
+                key={`${task.id}-assignees-${task.updatedAt}`}
+              >
+                {members.map((member) => (
+                  <label
+                    key={member.id}
+                    className="flex cursor-pointer items-center gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      name="assigneeIds"
+                      value={member.id}
+                      defaultChecked={task.assigneeIds.includes(member.id)}
+                      className="size-4 accent-primary"
+                    />
+                    <span>{member.name}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {task.assignees.length > 0
+                  ? task.assignees.map((assignee) => assignee.name).join(", ")
+                  : "Nieprzypisane"}
+              </p>
+            )}
+          </fieldset>
+
           <div className="grid gap-2">
             <Label htmlFor="task-description">Opis</Label>
-            <Textarea
+            <RichTextEditor
               id="task-description"
               name="description"
               defaultValue={task.description}
               key={`${task.id}-description-${task.updatedAt}`}
-              maxLength={10000}
-              rows={8}
-              placeholder="Opis zadania zwykłym tekstem..."
+              placeholder="Opisz zadanie — listy, nagłówki, linki..."
+              minHeightClassName="min-h-40"
             />
-            <p className="text-xs text-muted-foreground">
-              Zwykły tekst — podział linii zostanie zachowany.
-            </p>
           </div>
 
           <Button type="submit" disabled={pending} className="w-fit">
@@ -158,11 +177,13 @@ export function TaskDetailsSheet({
   boardId,
   task,
   members,
+  canManageAssignments,
   closeHref,
 }: {
   boardId: string;
   task: TaskDetails | null;
   members: BoardMember[];
+  canManageAssignments: boolean;
   closeHref: string;
 }) {
   const router = useRouter();
@@ -195,6 +216,7 @@ export function TaskDetailsSheet({
             boardId={boardId}
             task={task}
             members={members}
+            canManageAssignments={canManageAssignments}
           />
         </SheetContent>
       ) : null}

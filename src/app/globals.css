@@ -39,13 +39,13 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
 }
 
 :root {
@@ -55,8 +55,8 @@
   --card-foreground: oklch(0.141 0.005 285.823);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.511 0.262 276.966);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: #333333;
+  --primary-foreground: #fafafa;
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.967 0.001 286.375);
@@ -66,21 +66,21 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.511 0.262 276.966);
-  --chart-1: oklch(0.585 0.233 277.117);
+  --ring: #333333;
+  --chart-1: #333333;
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --radius: 0.75rem;
+  --radius: 0;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.511 0.262 276.966);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: #333333;
+  --sidebar-primary-foreground: #fafafa;
   --sidebar-accent: oklch(0.967 0.001 286.375);
   --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
   --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.511 0.262 276.966);
+  --sidebar-ring: #333333;
   color-scheme: light;
 }
 
@@ -91,8 +91,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.21 0.006 285.885);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.673 0.182 276.935);
-  --primary-foreground: oklch(0.141 0.005 285.823);
+  --primary: #c9a227;
+  --primary-foreground: #14110a;
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.274 0.006 286.033);
@@ -102,24 +102,41 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.673 0.182 276.935);
-  --chart-1: oklch(0.673 0.182 276.935);
+  --ring: #c9a227;
+  --chart-1: #c9a227;
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.21 0.006 285.885);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.673 0.182 276.935);
-  --sidebar-primary-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-primary: #c9a227;
+  --sidebar-primary-foreground: #14110a;
   --sidebar-accent: oklch(0.274 0.006 286.033);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.673 0.182 276.935);
+  --sidebar-ring: #c9a227;
   color-scheme: dark;
 }
 
 @layer base {
+  *,
+  *::before,
+  *::after {
+    border-radius: 0 !important;
+  }
+
+  /* Zdjęcia profilowe pozostają okrągłe mimo globalnego wyzerowania radiusu */
+  [data-slot="avatar"],
+  [data-slot="avatar"]::before,
+  [data-slot="avatar"]::after,
+  [data-slot="avatar-image"],
+  [data-slot="avatar-fallback"],
+  [data-slot="avatar-badge"],
+  [data-slot="avatar-group-count"] {
+    border-radius: 9999px !important;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
@@ -136,5 +153,65 @@
   h2,
   h3 {
     @apply font-heading tracking-tight text-foreground;
+  }
+
+  .prose-editor {
+    @apply text-foreground;
+  }
+
+  .prose-editor :where(p, ul, ol, blockquote, pre, h2, h3) {
+    margin: 0.5em 0;
+  }
+
+  .prose-editor :where(p):first-child,
+  .prose-editor :where(ul, ol, blockquote, pre, h2, h3):first-child {
+    margin-top: 0;
+  }
+
+  .prose-editor :where(p):last-child,
+  .prose-editor :where(ul, ol, blockquote, pre, h2, h3):last-child {
+    margin-bottom: 0;
+  }
+
+  .prose-editor :where(h2) {
+    @apply text-base font-semibold;
+  }
+
+  .prose-editor :where(h3) {
+    @apply text-sm font-semibold;
+  }
+
+  .prose-editor :where(ul) {
+    list-style: disc;
+    padding-left: 1.25rem;
+  }
+
+  .prose-editor :where(ol) {
+    list-style: decimal;
+    padding-left: 1.25rem;
+  }
+
+  .prose-editor :where(blockquote) {
+    @apply border-l-2 border-border pl-3 text-muted-foreground italic;
+  }
+
+  .prose-editor :where(a) {
+    @apply text-primary underline underline-offset-2;
+  }
+
+  .prose-editor :where(code) {
+    @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em];
+  }
+
+  .prose-editor :where(pre) {
+    @apply overflow-x-auto rounded-md bg-muted p-2 font-mono text-[0.85em];
+  }
+
+  .tiptap p.is-editor-empty:first-child::before {
+    color: var(--muted-foreground);
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
   }
 }

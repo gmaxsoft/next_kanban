@@ -7,7 +7,7 @@ export type BoardMember = {
 };
 
 export type BoardAssignee = {
-  id?: string;
+  id: string;
   name: string;
   avatarUrl?: string | null;
 };
@@ -17,8 +17,8 @@ export type BoardTask = {
   title: string;
   description?: string;
   priority: Priority;
-  assigneeId?: string | null;
-  assignee?: BoardAssignee;
+  dueDate?: string | null;
+  assignees: BoardAssignee[];
 };
 
 export type TaskComment = {
@@ -33,7 +33,9 @@ export type TaskDetails = {
   title: string;
   description: string;
   priority: Priority;
-  assigneeId: string | null;
+  dueDate: string | null;
+  assigneeIds: string[];
+  assignees: BoardAssignee[];
   columnTitle: string;
   createdByName: string;
   createdAt: string;
@@ -52,6 +54,38 @@ export type BoardSummary = {
   title: string;
   createdAt: Date;
   createdByName: string;
+  teamId: string;
+  teamName: string;
   columnCount: number;
   taskCount: number;
+};
+
+export type AssignBoardOption = {
+  id: string;
+  title: string;
+  teamId: string;
+  columns: { id: string; title: string; order: number }[];
+};
+
+export type AssignTeamOption = {
+  id: string;
+  name: string;
+};
+
+export type AssignMemberOption = BoardMember & {
+  teamId: string | null;
+};
+
+export type AssignedTaskRow = {
+  id: string;
+  title: string;
+  priority: Priority;
+  dueDate: string | null;
+  createdAt: string;
+  boardId: string;
+  boardTitle: string;
+  teamId: string;
+  teamName: string;
+  columnTitle: string;
+  assignees: BoardAssignee[];
 };

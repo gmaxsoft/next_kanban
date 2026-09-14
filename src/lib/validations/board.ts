@@ -13,6 +13,7 @@ export const createBoardSchema = z.object({
     .trim()
     .min(2, "Tytuł tablicy musi mieć co najmniej 2 znaki")
     .max(80, "Tytuł może mieć maksymalnie 80 znaków"),
+  teamId: z.string().uuid("Wybierz zespół"),
   columns: z
     .array(z.string().trim().min(1).max(40))
     .min(2, "Dodaj co najmniej dwie kolumny")
@@ -27,8 +28,31 @@ export const createTaskSchema = z.object({
     .trim()
     .min(1, "Tytuł zadania jest wymagany")
     .max(120, "Tytuł może mieć maksymalnie 120 znaków"),
-  description: z.string().trim().max(2000).optional(),
+  description: z.string().trim().max(20000).optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH"]).default("MEDIUM"),
+  assigneeIds: z.array(z.string().uuid()).max(50).default([]),
+  dueDate: z
+    .union([z.iso.date("Nieprawidłowa data"), z.literal("")])
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : null)),
+});
+
+export const assignTaskSchema = z.object({
+  teamId: z.string().uuid("Wybierz zespół"),
+  boardId: z.string().uuid("Wybierz tablicę"),
+  columnId: z.string().uuid("Wybierz status (kolumnę)"),
+  title: z
+    .string()
+    .trim()
+    .min(1, "Tytuł zadania jest wymagany")
+    .max(120, "Tytuł może mieć maksymalnie 120 znaków"),
+  description: z.string().trim().max(20000).optional(),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH"]).default("MEDIUM"),
+  assigneeIds: z
+    .array(z.string().uuid())
+    .min(1, "Wybierz co najmniej jedną osobę")
+    .max(50),
+  dueDate: z.iso.date("Nieprawidłowa data terminu"),
 });
 
 export const moveTaskSchema = z.object({
@@ -46,11 +70,17 @@ export const updateTaskSchema = z.object({
     .trim()
     .min(1, "Tytuł zadania jest wymagany")
     .max(120, "Tytuł może mieć maksymalnie 120 znaków"),
-  description: z.string().max(10000, "Opis może mieć maksymalnie 10000 znaków"),
+  description: z
+    .string()
+    .max(20000, "Opis może mieć maksymalnie 20000 znaków"),
   priority: z.enum(["LOW", "MEDIUM", "HIGH"]),
-  assigneeId: z
-    .union([z.string().uuid(), z.literal(""), z.literal("unassigned")])
-    .optional(),
+  assigneeIds: z.array(z.string().uuid()).max(50).optional(),
+  dueDate: z
+    .union([z.iso.date("Nieprawidłowa data"), z.literal("")])
+    .optional()
+    .transform((value) =>
+      value === undefined ? undefined : value.length > 0 ? value : null,
+    ),
 });
 
 export const addCommentSchema = z.object({

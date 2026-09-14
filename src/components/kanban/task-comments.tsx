@@ -1,13 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
-import { AlertCircleIcon } from "lucide-react";
 
 import { addComment, type TaskActionState } from "@/app/actions/tasks";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useActionToast } from "@/hooks/use-action-toast";
 import type { TaskComment } from "@/lib/kanban";
 import { getInitials } from "@/lib/user";
 
@@ -31,6 +30,7 @@ export function TaskComments({
     addComment,
     null,
   );
+  useActionToast(state);
 
   return (
     <section className="grid gap-3">
@@ -75,12 +75,6 @@ export function TaskComments({
       <form action={formAction} className="grid gap-2">
         <input type="hidden" name="boardId" value={boardId} />
         <input type="hidden" name="taskId" value={taskId} />
-        {state?.error ? (
-          <Alert variant="destructive">
-            <AlertCircleIcon />
-            <AlertDescription>{state.error}</AlertDescription>
-          </Alert>
-        ) : null}
         <Textarea
           name="content"
           required

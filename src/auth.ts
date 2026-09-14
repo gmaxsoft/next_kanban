@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
 import { loginSchema } from "@/lib/validations/auth";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -31,9 +31,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email.toLowerCase() },
+          include: {
+            role: { select: { id: true, name: true, isAdmin: true } },
+            team: { select: { id: true, name: true } },
+          },
         });
 
-        if (!user) {
+        if (!user || !user.isActive) {
           return null;
         }
 
@@ -51,7 +55,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           email: user.email,
           image: user.avatarUrl,
-          role: user.role,
+          isAdmin: user.role.isAdmin,
+          roleId: user.role.id,
+          roleName: user.role.name,
+          teamId: user.team?.id ?? null,
+          teamName: user.team?.name ?? null,
         };
       },
     }),

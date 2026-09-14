@@ -42,7 +42,7 @@ export default async function HomePage() {
     },
   ];
 
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = session.user.isAdmin;
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -82,7 +82,8 @@ export default async function HomePage() {
         <CardHeader>
           <CardTitle>Szybki start</CardTitle>
           <CardDescription>
-            Zalogowano jako {session.user.email} ({session.user.role}).
+            Zalogowano jako {session.user.email} ({session.user.roleName}
+            {session.user.teamName ? ` · ${session.user.teamName}` : ""}).
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">

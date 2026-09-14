@@ -1,7 +1,10 @@
+export type BoardView = "board" | "list";
+
 export type BoardSearchState = {
   q: string;
   assignee: string;
   taskId: string;
+  view: BoardView;
 };
 
 function firstParam(value?: string | string[]) {
@@ -15,15 +18,18 @@ export function parseBoardSearch(searchParams: {
   q?: string | string[];
   assignee?: string | string[];
   task?: string | string[];
+  view?: string | string[];
 }): BoardSearchState {
   const assignee = firstParam(searchParams.assignee).trim();
   const taskId = firstParam(searchParams.task).trim();
+  const view = firstParam(searchParams.view).trim().toLowerCase();
 
   return {
     q: firstParam(searchParams.q).trim().slice(0, 80),
     assignee:
       assignee === "unassigned" || uuidPattern.test(assignee) ? assignee : "",
     taskId: uuidPattern.test(taskId) ? taskId : "",
+    view: view === "list" ? "list" : "board",
   };
 }
 
@@ -44,6 +50,10 @@ export function boardPath(
 
   if (state.taskId) {
     params.set("task", state.taskId);
+  }
+
+  if (state.view === "list") {
+    params.set("view", "list");
   }
 
   const query = params.toString();

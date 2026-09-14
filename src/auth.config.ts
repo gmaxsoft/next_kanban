@@ -36,23 +36,57 @@ export const authConfig = {
         return false;
       }
 
-      if (pathname.startsWith("/users") && auth?.user.role !== "ADMIN") {
+      if (pathname.startsWith("/tasks") && !auth?.user.isAdmin) {
         return Response.redirect(new URL("/", request.nextUrl));
       }
 
       return true;
     },
-    jwt({ token, user }) {
+    jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id!;
-        token.role = user.role;
+        token.isAdmin = user.isAdmin;
+        token.roleId = user.roleId;
+        token.roleName = user.roleName;
+        token.teamId = user.teamId;
+        token.teamName = user.teamName;
+        token.picture = user.image;
+      }
+
+      if (trigger === "update" && session?.user) {
+        if ("image" in session.user) {
+          token.picture = session.user.image ?? null;
+        }
+        if (typeof session.user.name === "string") {
+          token.name = session.user.name;
+        }
+        if (typeof session.user.roleName === "string") {
+          token.roleName = session.user.roleName;
+        }
+        if (typeof session.user.roleId === "string") {
+          token.roleId = session.user.roleId;
+        }
+        if ("isAdmin" in session.user && typeof session.user.isAdmin === "boolean") {
+          token.isAdmin = session.user.isAdmin;
+        }
+        if ("teamId" in session.user) {
+          token.teamId = session.user.teamId ?? null;
+        }
+        if ("teamName" in session.user) {
+          token.teamName = session.user.teamName ?? null;
+        }
       }
 
       return token;
     },
     session({ session, token }) {
       session.user.id = token.id;
-      session.user.role = token.role;
+      session.user.isAdmin = Boolean(token.isAdmin);
+      session.user.roleId = token.roleId;
+      session.user.roleName = token.roleName;
+      session.user.teamId = token.teamId ?? null;
+      session.user.teamName = token.teamName ?? null;
+      session.user.image = (token.picture as string | null | undefined) ?? null;
 
       return session;
     },

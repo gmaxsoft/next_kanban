@@ -19,3 +19,7 @@ export function safeCallbackUrl(value: FormDataEntryValue | null) {
 
   return value;
 }
+
+export function formatActiveStatus(isActive: boolean) {
+  return isActive ? "Aktywny" : "Nieaktywny";
+}

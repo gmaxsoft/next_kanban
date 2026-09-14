@@ -21,7 +21,7 @@ import { useRouter } from "next/navigation";
 import { moveTask } from "@/app/actions/boards";
 import { KanbanColumn } from "@/components/kanban/board-column";
 import { TaskCard } from "@/components/kanban/task-card";
-import { boardPath } from "@/lib/board-query";
+import { boardPath, type BoardView } from "@/lib/board-query";
 import type { BoardColumn, BoardTask } from "@/lib/kanban";
 
 function findColumnId(columns: BoardColumn[], id: UniqueIdentifier) {
@@ -152,11 +152,15 @@ export function KanbanBoard({
   columns: initialColumns,
   q,
   assignee,
+  view,
+  canCreateTasks,
 }: {
   boardId: string;
   columns: BoardColumn[];
   q: string;
   assignee: string;
+  view: BoardView;
+  canCreateTasks: boolean;
 }) {
   const router = useRouter();
   const [columns, setColumns] = useState(initialColumns);
@@ -264,35 +268,38 @@ export function KanbanBoard({
   }
 
   function openTask(taskId: string) {
-    router.replace(boardPath(boardId, { q, assignee, taskId }));
+    router.replace(boardPath(boardId, { q, assignee, view, taskId }));
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragCancel={handleDragCancel}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="flex min-h-[28rem] flex-1 gap-4 overflow-x-auto pb-2">
-        {columns.map((column) => (
-          <KanbanColumn
-            key={column.id}
-            column={column}
-            boardId={boardId}
-            onOpenTask={openTask}
-          />
-        ))}
-      </div>
-      <DragOverlay>
-        {activeTask ? (
-          <div className="w-72 rotate-1">
-            <TaskCard task={activeTask} />
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+    <div className="flex min-h-0 w-full flex-1 flex-col">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragCancel={handleDragCancel}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex min-h-[28rem] w-full flex-1 gap-4 overflow-x-auto pb-2">
+          {columns.map((column) => (
+            <KanbanColumn
+              key={column.id}
+              column={column}
+              boardId={boardId}
+              canCreateTasks={canCreateTasks}
+              onOpenTask={openTask}
+            />
+          ))}
+        </div>
+        <DragOverlay>
+          {activeTask ? (
+            <div className="w-72 rotate-1">
+              <TaskCard task={activeTask} />
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    </div>
   );
 }

@@ -10,11 +10,13 @@ export function PresenceList({
   onlineUserIds,
   currentUserId,
   connected,
+  teamName,
 }: {
   members: ChatMember[];
   onlineUserIds: string[];
   currentUserId: string;
   connected: boolean;
+  teamName?: string;
 }) {
   const online = new Set(onlineUserIds);
 
@@ -38,7 +40,7 @@ export function PresenceList({
   return (
     <aside className="flex w-full shrink-0 flex-col border-t bg-card lg:w-72 lg:border-t-0 lg:border-l">
       <div className="border-b px-4 py-3">
-        <h3 className="text-sm font-semibold">Zespół</h3>
+        <h3 className="text-sm font-semibold">{teamName ?? "Zespół"}</h3>
         <p className="text-xs text-muted-foreground">
           {online.size} online · {members.length} łącznie
         </p>

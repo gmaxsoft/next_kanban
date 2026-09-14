@@ -1,6 +1,6 @@
 # Next Kanban
 
-Tablica Kanban dla zespołu: konta (ADMIN / USER), tablice i zadania w MySQL, przeciąganie kart, komentarze, powiadomienia e-mail i czat na żywo.
+Tablica Kanban dla zespołu: konta (ADMINISTRATOR / Pracownik), tablice i zadania w MySQL, przeciąganie kart, komentarze, powiadomienia e-mail i czat na żywo.
 
 ## Technologie
 
@@ -19,11 +19,13 @@ Główne ścieżki:
 
 - `/` — pulpit
 - `/login` — logowanie
-- `/boards` — lista tablic (tworzenie tylko ADMIN)
-- `/boards/[id]` — tablica Kanban
-- `/chat` — czat zespołu
-- `/users` — konta (tylko ADMIN)
-- `/profile` — zmiana hasła
+- `/settings` — zespoły i role (CRUD dla ADMINISTRATORA)
+- `/tasks` — przydzielanie zadań załodze (tylko ADMINISTRATOR)
+- `/boards` — lista tablic (tworzenie tylko ADMINISTRATOR)
+- `/boards/[id]` — tablica Kanban (dodawanie kart tylko ADMINISTRATOR)
+- `/chat` — czat w obrębie wybranego zespołu
+- `/users` — lista zespołu (edycja: ADMINISTRATOR wszystkich, Pracownik tylko siebie)
+- `/profile` — profil, zespół, zmiana hasła
 
 ## Wymagania
 
@@ -128,10 +130,10 @@ npm run start:all
 
 ## Co robi aplikacja
 
-- **Role** — ADMIN tworzy tablice, kolumny startowe i konta; USER pracuje na tablicach.
+- **Role** — ADMINISTRATOR tworzy tablice, przydziela zadania załodze i konta; Pracownik pracuje na tablicach (bez dodawania kart).
 - **Kanban** — przeciąganie zadań między kolumnami i w kolumnie; stan (`columnId`, `order`) zapisuje Server Action.
-- **Zadania** — panel szczegółów: opis, assignee, priorytet, komentarze; filtry po nazwie (Prisma `contains` / SQL `LIKE`) i osobie.
-- **E-mail** — powiadomienie przy przypisaniu do zadania i przy komentarzu na zadaniu assignee (wysyłka w tle przez `after()`).
+- **Zadania** — `/tasks`: status (kolumna), wielu assignee, termin; panel szczegółów i filtry na tablicy.
+- **E-mail** — powiadomienie przy przypisaniu do zadania i przy komentarzu (wysyłka w tle przez `after()`).
 - **Czat** — historia z MySQL, nowe wiadomości przez WebSocket, status Online/Offline z aktywnych połączeń.
 
 ## Struktura (skrót)
