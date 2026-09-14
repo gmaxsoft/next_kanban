@@ -7,15 +7,37 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  ADMIN
-  USER
-}
-
 enum Priority {
   LOW
   MEDIUM
   HIGH
+}
+
+model AppRole {
+  id        String   @id @default(uuid()) @db.Char(36)
+  name      String   @unique
+  slug      String   @unique @db.VarChar(64)
+  isSystem  Boolean  @default(false)
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  users User[]
+
+  @@map("Role")
+  @@index([isAdmin])
+}
+
+model Team {
+  id          String   @id @default(uuid()) @db.Char(36)
+  name        String   @unique
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now())
+
+  users        User[]
+  boards       Board[]
+  chatMessages ChatMessage[]
+
+  @@index([name])
 }
 
 model User {
@@ -24,19 +46,25 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   passwordHash  String    @db.VarChar(255)
-  role          Role      @default(USER)
+  roleId        String    @db.Char(36)
+  teamId        String?   @db.Char(36)
+  isActive      Boolean   @default(true)
   avatarUrl     String?
   createdAt     DateTime  @default(now())
 
-  accounts      Account[]
-  sessions      Session[]
-  boards        Board[]   @relation("BoardCreator")
-  assignedTasks Task[]    @relation("TaskAssignee")
-  createdTasks  Task[]    @relation("TaskCreator")
-  comments      Comment[]
-  chatMessages  ChatMessage[]
+  role             AppRole        @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  team             Team?          @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  accounts         Account[]
+  sessions         Session[]
+  boards           Board[]        @relation("BoardCreator")
+  taskAssignments  TaskAssignee[]
+  createdTasks     Task[]         @relation("TaskCreator")
+  comments         Comment[]
+  chatMessages     ChatMessage[]
 
-  @@index([role])
+  @@index([roleId])
+  @@index([teamId])
+  @@index([isActive])
 }
 
 model Account {
@@ -82,10 +110,13 @@ model Board {
   title       String
   createdAt   DateTime @default(now())
   createdById String   @db.Char(36)
+  teamId      String   @db.Char(36)
   createdBy   User     @relation("BoardCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Restrict)
   columns     Column[]
 
   @@index([createdById])
+  @@index([teamId])
 }
 
 model Column {
@@ -101,27 +132,38 @@ model Column {
 }
 
 model Task {
-  id          String   @id @default(uuid()) @db.Char(36)
+  id          String    @id @default(uuid()) @db.Char(36)
   title       String
-  description String?  @db.LongText
-  priority    Priority @default(MEDIUM)
+  description String?   @db.LongText
+  priority    Priority  @default(MEDIUM)
   order       Int
-  columnId    String   @db.Char(36)
-  assigneeId  String?  @db.Char(36)
-  createdById String   @db.Char(36)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  columnId    String    @db.Char(36)
+  dueDate     DateTime?
+  createdById String    @db.Char(36)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  column    Column    @relation(fields: [columnId], references: [id], onDelete: Cascade)
-  assignee  User?     @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  createdBy User      @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  comments  Comment[]
+  column      Column         @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  createdBy   User           @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  assignments TaskAssignee[]
+  comments    Comment[]
 
   @@index([columnId])
-  @@index([assigneeId])
   @@index([createdById])
   @@index([columnId, order])
   @@index([priority])
+  @@index([dueDate])
+}
+
+model TaskAssignee {
+  taskId String @db.Char(36)
+  userId String @db.Char(36)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
 }
 
 model Comment {
@@ -142,10 +184,30 @@ model ChatMessage {
   id        String   @id @default(uuid()) @db.Char(36)
   content   String   @db.Text
   authorId  String   @db.Char(36)
+  teamId    String   @db.Char(36)
   createdAt DateTime @default(now())
 
-  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author      User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  team        Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  attachments ChatAttachment[]
 
   @@index([createdAt])
   @@index([authorId])
+  @@index([teamId])
+  @@index([teamId, createdAt])
+}
+
+model ChatAttachment {
+  id           String   @id @default(uuid()) @db.Char(36)
+  messageId    String   @db.Char(36)
+  fileName     String
+  originalName String
+  mimeType     String
+  size         Int
+  url          String
+  createdAt    DateTime @default(now())
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
 }

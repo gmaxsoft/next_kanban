@@ -1,5 +1,10 @@
-import { PrismaClient, Role } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { hash } from "bcryptjs";
+
+import {
+  DEFAULT_TEAM_ID,
+  SYSTEM_ADMIN_ROLE_ID,
+} from "../src/lib/rbac";
 
 const prisma = new PrismaClient();
 
@@ -20,11 +25,12 @@ async function main() {
       name,
       email,
       passwordHash: await hash(password, 12),
-      role: Role.ADMIN,
+      roleId: SYSTEM_ADMIN_ROLE_ID,
+      teamId: DEFAULT_TEAM_ID,
     },
   });
 
-  console.log(`Utworzono konto ADMIN: ${email}`);
+  console.log(`Utworzono konto ADMINISTRATOR: ${email}`);
 }
 
 main()
