@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, LogOut, Search, UserRound } from "lucide-react";
+import { LogOut, UserRound } from "lucide-react";
 import type { Session } from "next-auth";
 
 import { logout } from "@/app/actions/auth";
+import { HeaderSearch } from "@/components/layout/header-search";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,15 +20,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+import type { AppNotification } from "@/lib/notifications";
 import { getInitials } from "@/lib/user";
 
 const pageTitles: Record<string, string> = {
   "/": "Pulpit",
   "/boards": "Tablice",
+  "/tasks": "Zadania",
   "/chat": "Czat",
   "/settings": "Ustawienia",
   "/profile": "Profil",
@@ -44,7 +47,15 @@ function getPageTitle(pathname: string) {
   return match ? pageTitles[match] : "Next Kanban";
 }
 
-export function AppNavbar({ user }: { user: Session["user"] }) {
+export function AppNavbar({
+  user,
+  notifications,
+  unreadCount,
+}: {
+  user: Session["user"];
+  notifications: AppNotification[];
+  unreadCount: number;
+}) {
   const pathname = usePathname();
   const title = getPageTitle(pathname);
   const initials = getInitials(user.name);
@@ -56,18 +67,12 @@ export function AppNavbar({ user }: { user: Session["user"] }) {
       <h1 className="text-sm font-medium">{title}</h1>
 
       <div className="ml-auto flex items-center gap-2">
-        <div className="relative hidden w-64 md:block">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Szukaj tablic i zadań..."
-            className="h-8 pl-8"
-          />
-        </div>
+        <HeaderSearch isAdmin={Boolean(user.isAdmin)} />
 
-        <Button variant="ghost" size="icon-sm" aria-label="Powiadomienia">
-          <Bell />
-        </Button>
+        <NotificationsBell
+          notifications={notifications}
+          unreadCount={unreadCount}
+        />
 
         <ThemeToggle />
 

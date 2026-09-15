@@ -59,3 +59,7 @@ export function boardPath(
   const query = params.toString();
   return query ? `/boards/${boardId}?${query}` : `/boards/${boardId}`;
 }
+
+export function taskPath(boardId: string, taskId: string) {
+  return `/boards/${boardId}/tasks/${taskId}`;
+}

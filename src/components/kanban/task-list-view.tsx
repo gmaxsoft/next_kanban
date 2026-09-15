@@ -6,7 +6,8 @@ import { PriorityBadge } from "@/components/kanban/priority-badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { RichTextContent } from "@/components/ui/rich-text-content";
-import { boardPath, type BoardView } from "@/lib/board-query";
+import type { BoardView } from "@/lib/board-query";
+import { taskPath } from "@/lib/board-query";
 import type { BoardColumn } from "@/lib/kanban";
 import { isEmptyRichText } from "@/lib/rich-text";
 import { getInitials } from "@/lib/user";
@@ -76,7 +77,7 @@ export function TaskListView({
   }
 
   function openTask(taskId: string) {
-    router.replace(boardPath(boardId, { q, assignee, view, taskId }));
+    router.push(taskPath(boardId, taskId));
   }
 
   return (

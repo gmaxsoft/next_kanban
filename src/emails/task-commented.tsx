@@ -56,6 +56,7 @@ export function TaskCommentedEmail({
   boardTitle,
   commentExcerpt,
   taskUrl,
+  mentioned = false,
 }: {
   assigneeName: string;
   actorName: string;
@@ -63,15 +64,25 @@ export function TaskCommentedEmail({
   boardTitle: string;
   commentExcerpt: string;
   taskUrl: string;
+  mentioned?: boolean;
 }) {
   return (
     <EmailLayout
-      preview={`${actorName} dodał(a) komentarz w zadaniu „${taskTitle}”.`}
+      preview={
+        mentioned
+          ? `${actorName} wspomniał(a) Cię w zadaniu „${taskTitle}”.`
+          : `${actorName} dodał(a) komentarz w zadaniu „${taskTitle}”.`
+      }
     >
-      <Heading style={heading}>Nowy komentarz w Twoim zadaniu</Heading>
+      <Heading style={heading}>
+        {mentioned ? "Wspomniano Cię w komentarzu" : "Nowy komentarz w zadaniu"}
+      </Heading>
       <Text style={text}>Cześć {assigneeName},</Text>
       <Text style={text}>
-        <span style={strong}>{actorName}</span> dodał(a) komentarz do zadania{" "}
+        <span style={strong}>{actorName}</span>{" "}
+        {mentioned
+          ? "oznaczył(a) Cię w komentarzu do zadania"
+          : "dodał(a) komentarz do zadania"}{" "}
         <span style={strong}>„{taskTitle}”</span> na tablicy{" "}
         <span style={strong}>{boardTitle}</span>.
       </Text>

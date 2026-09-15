@@ -10,7 +10,7 @@ function appUrl() {
 }
 
 export function taskUrl(boardId: string, taskId: string) {
-  return `${appUrl()}/boards/${boardId}?task=${taskId}`;
+  return `${appUrl()}/boards/${boardId}/tasks/${taskId}`;
 }
 
 export function excerpt(value: string, max = 240) {
@@ -110,11 +110,14 @@ export function notifyTaskCommented(input: {
   comment: string;
   boardId: string;
   taskId: string;
+  mentioned?: boolean;
 }) {
   scheduleMail(async () => {
     await sendReactEmail({
       to: input.toEmail,
-      subject: `Nowy komentarz w zadaniu: ${input.taskTitle}`,
+      subject: input.mentioned
+        ? `Wspomniano Cię w komentarzu: ${input.taskTitle}`
+        : `Nowy komentarz w zadaniu: ${input.taskTitle}`,
       react: TaskCommentedEmail({
         assigneeName: input.assigneeName,
         actorName: input.actorName,
@@ -122,6 +125,7 @@ export function notifyTaskCommented(input: {
         boardTitle: input.boardTitle,
         commentExcerpt: excerpt(input.comment),
         taskUrl: taskUrl(input.boardId, input.taskId),
+        mentioned: input.mentioned,
       }),
     });
   });

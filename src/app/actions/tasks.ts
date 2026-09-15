@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 
 import { requireAdmin, requireAuth } from "@/lib/auth-utils";
+import { taskPath } from "@/lib/board-query";
 import {
   notifyTaskAssigned,
   notifyTaskCommented,
 } from "@/lib/mail";
+import { extractMentionedUserIds } from "@/lib/mentions";
+import { createNotification, createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { normalizeRichTextInput } from "@/lib/rich-text";
 import {
@@ -131,9 +134,17 @@ export async function assignTask(
       boardId: column.boardId,
       taskId: task.id,
     });
+
+    await createNotification({
+      userId: assignee.id,
+      title: "Przypisano Ci zadanie",
+      body: `${actorName} przydzielił(a) Ci „${parsed.data.title}” na tablicy ${column.board.title}.`,
+      href: taskPath(column.boardId, task.id),
+    });
   }
 
   revalidatePath("/");
+  revalidatePath("/", "layout");
   revalidatePath("/boards");
   revalidatePath("/tasks");
   revalidatePath(`/boards/${column.boardId}`);
@@ -254,13 +265,22 @@ export async function updateTask(
         boardId: task.column.boardId,
         taskId: task.id,
       });
+
+      await createNotification({
+        userId: assignee.id,
+        title: "Przypisano Ci zadanie",
+        body: `${actorName} przydzielił(a) Ci „${parsed.data.title}” na tablicy ${task.column.board.title}.`,
+        href: taskPath(task.column.boardId, task.id),
+      });
     }
   }
 
   revalidatePath("/");
+  revalidatePath("/", "layout");
   revalidatePath("/boards");
   revalidatePath("/tasks");
   revalidatePath(`/boards/${parsed.data.boardId}`);
+  revalidatePath(`/boards/${parsed.data.boardId}/tasks/${parsed.data.taskId}`);
 
   return { success: "Zapisano zmiany w zadaniu." };
 }
@@ -270,6 +290,10 @@ export async function addComment(
   formData: FormData,
 ): Promise<TaskActionState> {
   const session = await requireAuth();
+  const explicitMentionIds = formData
+    .getAll("mentionedIds")
+    .map((value) => String(value))
+    .filter(Boolean);
 
   const parsed = addCommentSchema.safeParse({
     boardId: String(formData.get("boardId") ?? ""),
@@ -297,7 +321,12 @@ export async function addComment(
       column: {
         select: {
           boardId: true,
-          board: { select: { title: true } },
+          board: {
+            select: {
+              title: true,
+              teamId: true,
+            },
+          },
         },
       },
     },
@@ -306,6 +335,21 @@ export async function addComment(
   if (!task) {
     return { error: "Nie znaleziono zadania na tej tablicy." };
   }
+
+  const teamMembers = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      teamId: task.column.board.teamId,
+    },
+    select: { id: true, name: true, email: true },
+    orderBy: { name: "asc" },
+  });
+
+  const mentionedIds = extractMentionedUserIds(
+    parsed.data.content,
+    teamMembers,
+    explicitMentionIds,
+  );
 
   await prisma.comment.create({
     data: {
@@ -316,12 +360,17 @@ export async function addComment(
   });
 
   const actorName = session.user.name ?? session.user.email ?? "Ktoś z zespołu";
+  const notified = new Set<string>();
+  const href = taskPath(task.column.boardId, task.id);
+  const commentPreview = parsed.data.content.slice(0, 120);
 
   for (const assignment of task.assignments) {
     if (assignment.user.id === session.user.id) {
       continue;
     }
 
+    const mentioned = mentionedIds.includes(assignment.user.id);
+    notified.add(assignment.user.id);
     notifyTaskCommented({
       toEmail: assignment.user.email,
       assigneeName: assignment.user.name,
@@ -331,10 +380,54 @@ export async function addComment(
       comment: parsed.data.content,
       boardId: task.column.boardId,
       taskId: task.id,
+      mentioned,
+    });
+
+    await createNotification({
+      userId: assignment.user.id,
+      title: mentioned
+        ? "Wspomniano Cię w komentarzu"
+        : "Nowy komentarz w zadaniu",
+      body: `${actorName}: ${commentPreview}`,
+      href,
     });
   }
 
+  const mentionOnlyIds = mentionedIds.filter(
+    (id) => id !== session.user.id && !notified.has(id),
+  );
+
+  for (const member of teamMembers) {
+    if (!mentionOnlyIds.includes(member.id)) {
+      continue;
+    }
+
+    notifyTaskCommented({
+      toEmail: member.email,
+      assigneeName: member.name,
+      actorName,
+      taskTitle: task.title,
+      boardTitle: task.column.board.title,
+      comment: parsed.data.content,
+      boardId: task.column.boardId,
+      taskId: task.id,
+      mentioned: true,
+    });
+  }
+
+  if (mentionOnlyIds.length > 0) {
+    await createNotifications(mentionOnlyIds, {
+      title: "Wspomniano Cię w komentarzu",
+      body: `${actorName}: ${commentPreview}`,
+      href,
+    });
+  }
+
+  revalidatePath("/", "layout");
   revalidatePath(`/boards/${parsed.data.boardId}`);
+  revalidatePath(
+    `/boards/${parsed.data.boardId}/tasks/${parsed.data.taskId}`,
+  );
 
   return { success: "Dodano komentarz." };
 }

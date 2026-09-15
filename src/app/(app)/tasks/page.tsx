@@ -204,7 +204,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
                   <tr key={task.id} className="border-b last:border-0">
                     <td className="py-3 pr-4">
                       <Link
-                        href={`/boards/${task.boardId}?task=${task.id}`}
+                        href={`/boards/${task.boardId}/tasks/${task.id}`}
                         className="font-medium underline-offset-4 hover:underline"
                       >
                         {task.title}

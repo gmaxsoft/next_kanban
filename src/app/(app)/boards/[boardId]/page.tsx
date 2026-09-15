@@ -1,19 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { BoardFilters } from "@/components/kanban/board-filters";
 import { BoardViewTabs } from "@/components/kanban/board-view-tabs";
 import { KanbanBoard } from "@/components/kanban/kanban-board";
-import { TaskDetailsSheet } from "@/components/kanban/task-details-sheet";
 import { TaskListView } from "@/components/kanban/task-list-view";
 import { Button } from "@/components/ui/button";
 import { requireAuth } from "@/lib/auth-utils";
-import { boardPath, parseBoardSearch } from "@/lib/board-query";
+import { parseBoardSearch, taskPath } from "@/lib/board-query";
 import {
   getBoardWithColumns,
-  getTaskDetails,
   listBoardMembers,
   mapBoardColumns,
 } from "@/lib/boards";
@@ -45,17 +43,17 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
   const { q, assignee, taskId, view } = parseBoardSearch(await searchParams);
   const canCreateTasks = session.user.isAdmin;
 
+  if (taskId) {
+    redirect(taskPath(boardId, taskId));
+  }
+
   const board = await getBoardWithColumns(boardId, { q, assignee });
 
   if (!board) {
     notFound();
   }
 
-  const [members, selectedTask] = await Promise.all([
-    listBoardMembers(board.teamId),
-    taskId ? getTaskDetails(boardId, taskId) : Promise.resolve(null),
-  ]);
-
+  const members = await listBoardMembers(board.teamId);
   const columns = mapBoardColumns(board);
   const boardKey = [
     view,
@@ -87,7 +85,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
             Zespół: {board.team.name}.{" "}
             {view === "list"
               ? "Widok listy — kliknij wiersz, aby otworzyć szczegóły zadania."
-              : "Widok tablicy — kliknij kartę, przeciągnij między kolumnami."}
+              : "Widok tablicy — kliknij kartę, aby otworzyć stronę szczegółów."}
             {!canCreateTasks
               ? " Dodawanie zadań jest dostępne tylko dla ADMINISTRATORA."
               : null}
@@ -98,7 +96,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           view={view}
           q={q}
           assignee={assignee}
-          taskId={taskId}
+          taskId=""
         />
       </div>
 
@@ -106,7 +104,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
         boardId={board.id}
         q={q}
         assignee={assignee}
-        taskId={taskId}
+        taskId=""
         view={view}
         members={members}
       />
@@ -136,14 +134,6 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           canCreateTasks={canCreateTasks}
         />
       )}
-
-      <TaskDetailsSheet
-        boardId={board.id}
-        task={selectedTask}
-        members={members}
-        canManageAssignments={canCreateTasks}
-        closeHref={boardPath(board.id, { q, assignee, view })}
-      />
     </div>
   );
 }
