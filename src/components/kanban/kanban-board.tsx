@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -21,7 +21,8 @@ import { useRouter } from "next/navigation";
 import { moveTask } from "@/app/actions/boards";
 import { KanbanColumn } from "@/components/kanban/board-column";
 import { TaskCard } from "@/components/kanban/task-card";
-import { boardPath, type BoardView } from "@/lib/board-query";
+import type { BoardView } from "@/lib/board-query";
+import { taskPath } from "@/lib/board-query";
 import type { BoardColumn, BoardTask } from "@/lib/kanban";
 
 function findColumnId(columns: BoardColumn[], id: UniqueIdentifier) {
@@ -165,8 +166,13 @@ export function KanbanBoard({
   const router = useRouter();
   const [columns, setColumns] = useState(initialColumns);
   const [activeTask, setActiveTask] = useState<BoardTask | null>(null);
+  const [dndReady, setDndReady] = useState(false);
   const columnsRef = useRef(columns);
   const dragOriginRef = useRef<BoardColumn[] | null>(null);
+
+  useEffect(() => {
+    setDndReady(true);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -268,12 +274,55 @@ export function KanbanBoard({
   }
 
   function openTask(taskId: string) {
-    router.replace(boardPath(boardId, { q, assignee, view, taskId }));
+    router.push(taskPath(boardId, taskId));
+  }
+
+  // @dnd-kit uses module-level ID counters that diverge between SSR and client.
+  // Render a static board until mount, then enable DnD with a stable context id.
+  if (!dndReady) {
+    return (
+      <div
+        className="flex min-h-0 w-full flex-1 flex-col"
+        aria-busy="true"
+      >
+        <div className="flex min-h-[28rem] w-full flex-1 gap-4 overflow-x-auto pb-2">
+          {columns.map((column) => (
+            <section
+              key={column.id}
+              className="flex min-h-[28rem] min-w-72 flex-1 basis-0 flex-col bg-muted/50 p-3"
+            >
+              <header className="mb-3 flex items-center justify-between gap-2 px-1">
+                <h3 className="text-sm font-semibold tracking-tight">
+                  {column.title}
+                </h3>
+                <span className="rounded-full bg-background/80 px-2 py-0.5 text-xs text-muted-foreground">
+                  {column.tasks.length}
+                </span>
+              </header>
+              <div className="flex min-h-28 flex-1 flex-col gap-2 overflow-y-auto">
+                {column.tasks.map((task) => (
+                  <button
+                    key={task.id}
+                    type="button"
+                    className="cursor-pointer text-left"
+                    aria-label={`Otwórz zadanie ${task.title}`}
+                    onClick={() => openTask(task.id)}
+                  >
+                    <TaskCard task={task} />
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       <DndContext
+        id={`kanban-${boardId}`}
         sensors={sensors}
         collisionDetection={closestCorners}
         onDragStart={handleDragStart}

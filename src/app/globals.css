@@ -126,14 +126,15 @@
     border-radius: 0 !important;
   }
 
-  /* Zdjęcia profilowe pozostają okrągłe mimo globalnego wyzerowania radiusu */
+  /* Zdjęcia profilowe i badge powiadomień pozostają okrągłe mimo globalnego wyzerowania radiusu */
   [data-slot="avatar"],
   [data-slot="avatar"]::before,
   [data-slot="avatar"]::after,
   [data-slot="avatar-image"],
   [data-slot="avatar-fallback"],
   [data-slot="avatar-badge"],
-  [data-slot="avatar-group-count"] {
+  [data-slot="avatar-group-count"],
+  [data-slot="notification-badge"] {
     border-radius: 9999px !important;
   }
 
@@ -147,6 +148,26 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+  }
+
+  select {
+    color-scheme: inherit;
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  select option,
+  select optgroup {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  .dark select,
+  .dark select option,
+  .dark select optgroup {
+    color-scheme: dark;
+    background-color: #18181b;
+    color: #fafafa;
   }
 
   h1,
