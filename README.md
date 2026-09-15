@@ -1,6 +1,6 @@
 # Next Kanban
 
-Tablica Kanban dla zespołu: konta (ADMINISTRATOR / Pracownik), tablice i zadania w MySQL, przeciąganie kart, komentarze, powiadomienia e-mail i czat na żywo.
+Tablica Kanban dla zespołu: konta (ADMINISTRATOR / Pracownik), tablice i zadania w MySQL, przeciąganie kart, komentarze z @wzmiankami, powiadomienia w aplikacji i e-mail oraz czat na żywo.
 
 ## Technologie
 
@@ -8,6 +8,7 @@ Tablica Kanban dla zespołu: konta (ADMINISTRATOR / Pracownik), tablice i zadani
 | --- | --- |
 | Aplikacja | **Next.js 16** (App Router), **React 19**, **TypeScript** |
 | UI | **Tailwind CSS 4**, **shadcn/ui** (Base UI), **lucide-react**, **next-themes** |
+| Edytor | **TipTap** + sanitizacja **isomorphic-dompurify** |
 | Auth | **Auth.js (NextAuth v5)** — Credentials + JWT, adapter Prisma |
 | Baza | **Prisma 6** + **MySQL / MariaDB** |
 | Kanban DnD | **@dnd-kit** |
@@ -17,12 +18,13 @@ Tablica Kanban dla zespołu: konta (ADMINISTRATOR / Pracownik), tablice i zadani
 
 Główne ścieżki:
 
-- `/` — pulpit
+- `/` — pulpit (ADMIN: cały system; Pracownik: własne zadania i zespół)
 - `/login` — logowanie
 - `/settings` — zespoły i role (CRUD dla ADMINISTRATORA)
-- `/tasks` — przydzielanie zadań załodze (tylko ADMINISTRATOR)
-- `/boards` — lista tablic (tworzenie tylko ADMINISTRATOR)
-- `/boards/[id]` — tablica Kanban (dodawanie kart tylko ADMINISTRATOR)
+- `/tasks` — przegląd i przydzielanie zadań (tylko ADMINISTRATOR)
+- `/boards` — lista tablic (tworzenie tylko ADMINISTRATOR; tablica należy do zespołu)
+- `/boards/[id]` — tablica Kanban lub widok listy (dodawanie kart tylko ADMINISTRATOR)
+- `/boards/[id]/tasks/[taskId]` — strona szczegółów zadania (opis WYSIWYG, assignee, komentarze, @wzmianki)
 - `/chat` — czat w obrębie wybranego zespołu
 - `/users` — lista zespołu (edycja: ADMINISTRATOR wszystkich, Pracownik tylko siebie)
 - `/profile` — profil, zespół, zmiana hasła
@@ -77,7 +79,12 @@ npx prisma migrate deploy
 npx prisma db seed
 ```
 
-Seed tworzy konto:
+Seed tworzy m.in.:
+
+- konto ADMINISTRATOR (`SEED_ADMIN_*`)
+- zespoły (w tym Biuro) i przykładowych pracowników (w zależności od seeda)
+
+Domyślne logowanie ADMIN:
 
 - e-mail: `admin@kanban.local` (lub `SEED_ADMIN_EMAIL`)
 - hasło: `ChangeMe123!` (lub `SEED_ADMIN_PASSWORD`)
@@ -125,24 +132,27 @@ npm run start:all
 | `npm run build` | Build produkcyjny Next.js |
 | `npm run lint` | ESLint |
 | `npx prisma migrate deploy` | Aplikuje migracje |
-| `npx prisma db seed` | Konto ADMIN |
+| `npx prisma db seed` | Seed (role, zespoły, ADMIN, przykładowe dane) |
 | `npx prisma studio` | Podgląd bazy |
 
 ## Co robi aplikacja
 
-- **Role** — ADMINISTRATOR tworzy tablice, przydziela zadania załodze i konta; Pracownik pracuje na tablicach (bez dodawania kart).
-- **Kanban** — przeciąganie zadań między kolumnami i w kolumnie; stan (`columnId`, `order`) zapisuje Server Action.
-- **Zadania** — `/tasks`: status (kolumna), wielu assignee, termin; panel szczegółów i filtry na tablicy.
-- **E-mail** — powiadomienie przy przypisaniu do zadania i przy komentarzu (wysyłka w tle przez `after()`).
-- **Czat** — historia z MySQL, nowe wiadomości przez WebSocket, status Online/Offline z aktywnych połączeń.
+- **Role i zespoły** — ADMINISTRATOR zarządza tablicami, zadaniami, użytkownikami, rolami i zespołami; Pracownik pracuje w swoim zakresie (bez dodawania kart / bez `/tasks`).
+- **Kanban** — widok tablicy i listy; przeciąganie zadań między kolumnami; filtry i paginacja list.
+- **Szczegóły zadania** — dedykowana strona z opisem TipTap, assignee, terminem i komentarzami; `@imię` w komentarzu wysyła e-mail i tworzy powiadomienie w aplikacji.
+- **Powiadomienia** — dzwonek w nagłówku (nieprzeczytane, oznaczanie jako przeczytane); także e-mail przy przypisaniu i komentarzu (Resend, wysyłka w tle).
+- **Wyszukiwanie** — pole w nagłówku szuka tablic i zadań (wyniki zależne od roli).
+- **Pulpit** — ADMIN widzi statystyki całego systemu; Pracownik — własne zadania i skróty zespołu.
+- **Czat** — historia w MySQL, WebSocket, status Online/Offline.
 
 ## Struktura (skrót)
 
 ```
-prisma/           schemat i migracje
-server/socket.ts  lekki serwer Socket.io
-src/app/          App Router, Server Actions, API
-src/components/   UI (Kanban, czat, layout)
-src/emails/       szablony React Email
-src/lib/          Prisma, auth, mail, czat
+prisma/                 schemat i migracje (m.in. Notification)
+server/socket.ts        lekki serwer Socket.io
+src/app/                App Router, Server Actions, API
+src/app/(app)/boards/[boardId]/tasks/[taskId]/  szczegóły zadania
+src/components/         UI (Kanban, czat, layout, powiadomienia, wyszukiwarka)
+src/emails/             szablony React Email
+src/lib/                Prisma, auth, mail, mentions, notifications, czat
 ```
