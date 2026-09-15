@@ -2,6 +2,8 @@
 
 Tablica Kanban dla zespołu: konta (ADMINISTRATOR / Pracownik), tablice i zadania w MySQL, przeciąganie kart, komentarze z @wzmiankami, powiadomienia w aplikacji i e-mail oraz czat na żywo.
 
+![Next Kanban — podgląd aplikacji](./screenshot.png)
+
 ## Technologie
 
 | Warstwa | Stack |
