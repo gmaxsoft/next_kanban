@@ -4,6 +4,7 @@ import { Resend } from "resend";
 
 import { TaskAssignedEmail } from "@/emails/task-assigned";
 import { TaskCommentedEmail } from "@/emails/task-commented";
+import { TicketReplyEmail } from "@/emails/ticket-reply";
 
 function appUrl() {
   return (process.env.AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -11,6 +12,10 @@ function appUrl() {
 
 export function taskUrl(boardId: string, taskId: string) {
   return `${appUrl()}/boards/${boardId}/tasks/${taskId}`;
+}
+
+export function ticketUrl(ticketId: string) {
+  return `${appUrl()}/tickets/${ticketId}`;
 }
 
 export function excerpt(value: string, max = 240) {
@@ -51,10 +56,12 @@ async function sendReactEmail({
   to,
   subject,
   react,
+  replyTo,
 }: {
   to: string;
   subject: string;
   react: ReactNode;
+  replyTo?: string;
 }) {
   const resend = getClient();
 
@@ -70,6 +77,7 @@ async function sendReactEmail({
     to,
     subject,
     react,
+    ...(replyTo ? { replyTo } : {}),
   });
 
   if (error) {
@@ -128,5 +136,30 @@ export function notifyTaskCommented(input: {
         mentioned: input.mentioned,
       }),
     });
+  });
+}
+
+export async function sendTicketReplyEmail(input: {
+  toEmail: string;
+  requesterName: string | null;
+  agentName: string;
+  ticketId: string;
+  displayId: string;
+  subject: string;
+  body: string;
+  replyTo?: string | null;
+}) {
+  await sendReactEmail({
+    to: input.toEmail,
+    subject: input.subject,
+    replyTo: input.replyTo || undefined,
+    react: TicketReplyEmail({
+      requesterName: input.requesterName ?? "Kliencie",
+      agentName: input.agentName,
+      ticketId: input.displayId,
+      subject: input.subject,
+      body: input.body,
+      ticketUrl: ticketUrl(input.ticketId),
+    }),
   });
 }

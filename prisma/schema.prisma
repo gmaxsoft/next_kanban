@@ -13,6 +13,18 @@ enum Priority {
   HIGH
 }
 
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum TicketMessageKind {
+  INBOUND
+  OUTBOUND
+  INTERNAL
+}
+
 model AppRole {
   id        String   @id @default(uuid()) @db.Char(36)
   name      String   @unique
@@ -28,14 +40,16 @@ model AppRole {
 }
 
 model Team {
-  id          String   @id @default(uuid()) @db.Char(36)
-  name        String   @unique
-  description String?  @db.VarChar(255)
-  createdAt   DateTime @default(now())
+  id           String   @id @default(uuid()) @db.Char(36)
+  name         String   @unique
+  description  String?  @db.VarChar(255)
+  inboundEmail String?  @unique @db.VarChar(255)
+  createdAt    DateTime @default(now())
 
   users        User[]
   boards       Board[]
   chatMessages ChatMessage[]
+  tickets      Ticket[]
 
   @@index([name])
 }
@@ -62,6 +76,7 @@ model User {
   comments         Comment[]
   chatMessages     ChatMessage[]
   notifications    Notification[]
+  ticketMessages   TicketMessage[]
 
   @@index([roleId])
   @@index([teamId])
@@ -163,6 +178,7 @@ model Task {
   createdBy   User           @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
   assignments TaskAssignee[]
   comments    Comment[]
+  ticket      Ticket?
 
   @@index([columnId])
   @@index([createdById])
@@ -226,4 +242,47 @@ model ChatAttachment {
   message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
+}
+
+model Ticket {
+  id              String       @id @default(uuid()) @db.Char(36)
+  number          Int          @unique @default(autoincrement())
+  subject         String       @db.VarChar(255)
+  status          TicketStatus @default(OPEN)
+  requesterEmail  String       @db.VarChar(255)
+  requesterName   String?      @db.VarChar(160)
+  teamId          String?      @db.Char(36)
+  taskId          String?      @unique @db.Char(36)
+  lastMessageAt   DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  team     Team?           @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  task     Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  messages TicketMessage[]
+
+  @@index([status, lastMessageAt])
+  @@index([teamId])
+  @@index([requesterEmail])
+  @@index([createdAt])
+}
+
+model TicketMessage {
+  id                String            @id @default(uuid()) @db.Char(36)
+  ticketId          String            @db.Char(36)
+  kind              TicketMessageKind
+  fromEmail         String?           @db.VarChar(255)
+  fromName          String?           @db.VarChar(160)
+  subject           String?           @db.VarChar(255)
+  bodyText          String?           @db.LongText
+  bodyHtml          String?           @db.LongText
+  externalMessageId String?           @unique @db.VarChar(255)
+  authorId          String?           @db.Char(36)
+  createdAt         DateTime          @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User?  @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@index([authorId])
 }

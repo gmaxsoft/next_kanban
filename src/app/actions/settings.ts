@@ -163,9 +163,11 @@ export async function createTeam(
   await requireAdmin();
 
   const description = String(formData.get("description") ?? "").trim();
+  const inboundEmail = String(formData.get("inboundEmail") ?? "").trim();
   const parsed = teamSchema.safeParse({
     name: String(formData.get("name") ?? ""),
     description: description || undefined,
+    inboundEmail: inboundEmail || "",
   });
 
   if (!parsed.success) {
@@ -177,6 +179,7 @@ export async function createTeam(
       data: {
         name: parsed.data.name,
         description: parsed.data.description,
+        inboundEmail: parsed.data.inboundEmail || null,
       },
     });
   } catch (error) {
@@ -184,7 +187,7 @@ export async function createTeam(
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return { error: "Zespół o takiej nazwie już istnieje." };
+      return { error: "Zespół lub skrzynka e-mail już istnieje." };
     }
     return { error: "Nie udało się utworzyć zespołu." };
   }
@@ -200,10 +203,12 @@ export async function updateTeam(
   await requireAdmin();
 
   const description = String(formData.get("description") ?? "").trim();
+  const inboundEmail = String(formData.get("inboundEmail") ?? "").trim();
   const parsed = updateTeamSchema.safeParse({
     teamId: String(formData.get("teamId") ?? ""),
     name: String(formData.get("name") ?? ""),
     description: description || undefined,
+    inboundEmail: inboundEmail || "",
   });
 
   if (!parsed.success) {
@@ -216,6 +221,7 @@ export async function updateTeam(
       data: {
         name: parsed.data.name,
         description: parsed.data.description ?? null,
+        inboundEmail: parsed.data.inboundEmail || null,
       },
     });
   } catch (error) {
@@ -223,7 +229,7 @@ export async function updateTeam(
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return { error: "Zespół o takiej nazwie już istnieje." };
+      return { error: "Zespół lub skrzynka e-mail już istnieje." };
     }
     return { error: "Nie udało się zapisać zespołu." };
   }

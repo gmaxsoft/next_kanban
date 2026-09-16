@@ -9,6 +9,7 @@ import {
   ListTodo,
   MessageCircle,
   Settings,
+  Ticket,
   Users,
 } from "lucide-react";
 import type { Session } from "next-auth";
@@ -39,6 +40,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { title: "Pulpit", href: "/", icon: LayoutDashboard },
   { title: "Zadania", href: "/tasks", icon: ListTodo, adminOnly: true },
+  { title: "Tickety", href: "/tickets", icon: Ticket, adminOnly: true },
   { title: "Tablice", href: "/boards", icon: Columns3 },
   { title: "Czat", href: "/chat", icon: MessageCircle },
   { title: "Ustawienia", href: "/settings", icon: Settings },

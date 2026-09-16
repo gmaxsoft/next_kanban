@@ -144,6 +144,12 @@ export type TasksListFilters = {
   priority: "" | "LOW" | "MEDIUM" | "HIGH";
 };
 
+export type TicketsListFilters = {
+  q: string;
+  status: "" | "OPEN" | "IN_PROGRESS" | "RESOLVED";
+  team: string;
+};
+
 export function parseTasksListSearch(searchParams: {
   q?: string | string[];
   team?: string | string[];
@@ -159,5 +165,21 @@ export function parseTasksListSearch(searchParams: {
       "MEDIUM",
       "HIGH",
     ] as const),
+  };
+}
+
+export function parseTicketsListSearch(searchParams: {
+  q?: string | string[];
+  status?: string | string[];
+  team?: string | string[];
+}): TicketsListFilters {
+  return {
+    q: parseSearchQuery(searchParams.q),
+    status: parseEnumParam(searchParams.status, [
+      "OPEN",
+      "IN_PROGRESS",
+      "RESOLVED",
+    ] as const),
+    team: parseUuidParam(searchParams.team),
   };
 }

@@ -64,6 +64,7 @@ export default async function SettingsPage() {
                   id: team.id,
                   name: team.name,
                   description: team.description,
+                  inboundEmail: team.inboundEmail,
                   userCount: team._count.users,
                 }))}
               />

@@ -18,6 +18,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname.startsWith("/api/webhooks/")) {
+    return NextResponse.next();
+  }
+
   if (isLogin) {
     if (isLoggedIn) {
       return NextResponse.redirect(new URL("/", request.url));
@@ -33,6 +37,10 @@ export async function proxy(request: NextRequest) {
   }
 
   if (pathname.startsWith("/tasks") && !session?.user.isAdmin) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  if (pathname.startsWith("/tickets") && !session?.user.isAdmin) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

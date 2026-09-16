@@ -26,6 +26,7 @@ export type TeamRow = {
   id: string;
   name: string;
   description: string | null;
+  inboundEmail: string | null;
   userCount: number;
 };
 
@@ -50,7 +51,8 @@ export function TeamsPanel({
     }
     return (
       team.name.toLowerCase().includes(q) ||
-      (team.description ?? "").toLowerCase().includes(q)
+      (team.description ?? "").toLowerCase().includes(q) ||
+      (team.inboundEmail ?? "").toLowerCase().includes(q)
     );
   });
 
@@ -59,7 +61,7 @@ export function TeamsPanel({
       {canManage ? (
         <form
           action={createAction}
-          className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"
         >
           <div className="grid gap-2">
             <Label htmlFor="team-name">Nowy zespół</Label>
@@ -78,6 +80,16 @@ export function TeamsPanel({
               name="description"
               maxLength={255}
               placeholder="Opcjonalnie"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="team-inbound">Skrzynka ticketów</Label>
+            <Input
+              id="team-inbound"
+              name="inboundEmail"
+              type="email"
+              maxLength={255}
+              placeholder="np. it@pwginfo.pl"
             />
           </div>
           <Button type="submit" disabled={createPending}>
@@ -107,6 +119,7 @@ export function TeamsPanel({
             <tr>
               <th className="px-3 py-2 font-medium">Nazwa</th>
               <th className="px-3 py-2 font-medium">Opis</th>
+              <th className="px-3 py-2 font-medium">Skrzynka</th>
               <th className="px-3 py-2 font-medium">Członkowie</th>
               {canManage ? (
                 <th className="px-3 py-2 font-medium">Akcje</th>
@@ -117,7 +130,7 @@ export function TeamsPanel({
             {filteredTeams.length === 0 ? (
               <tr>
                 <td
-                  colSpan={canManage ? 4 : 3}
+                  colSpan={canManage ? 5 : 4}
                   className="px-3 py-4 text-sm text-muted-foreground"
                 >
                   Brak zespołów pasujących do filtra.
@@ -129,6 +142,9 @@ export function TeamsPanel({
                   <td className="px-3 py-2.5 font-medium">{team.name}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">
                     {team.description || "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-muted-foreground">
+                    {team.inboundEmail || "—"}
                   </td>
                   <td className="px-3 py-2.5">{team.userCount}</td>
                   {canManage ? (
@@ -201,6 +217,18 @@ function EditTeamButton({ team }: { team: TeamRow }) {
                 id={`team-edit-desc-${team.id}`}
                 name="description"
                 defaultValue={team.description ?? ""}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`team-edit-inbound-${team.id}`}>
+                Skrzynka ticketów
+              </Label>
+              <Input
+                id={`team-edit-inbound-${team.id}`}
+                name="inboundEmail"
+                type="email"
+                defaultValue={team.inboundEmail ?? ""}
+                placeholder="np. it@pwginfo.pl"
               />
             </div>
             <Button type="submit" disabled={pending} className="w-fit">

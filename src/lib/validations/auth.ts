@@ -95,6 +95,10 @@ export const teamSchema = z.object({
     .trim()
     .max(255, "Opis może mieć maksymalnie 255 znaków")
     .optional(),
+  inboundEmail: z.union([
+    z.literal(""),
+    z.string().trim().email("Podaj poprawny adres e-mail skrzynki").max(255),
+  ]),
 });
 
 export const updateTeamSchema = teamSchema.extend({

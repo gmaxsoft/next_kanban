@@ -29,6 +29,7 @@ const pageTitles: Record<string, string> = {
   "/": "Pulpit",
   "/boards": "Tablice",
   "/tasks": "Zadania",
+  "/tickets": "Tickety",
   "/chat": "Czat",
   "/settings": "Ustawienia",
   "/profile": "Profil",

@@ -24,6 +24,10 @@ export const authConfig = {
         return true;
       }
 
+      if (pathname.startsWith("/api/webhooks/")) {
+        return true;
+      }
+
       if (isPublicRoute) {
         if (isLoggedIn) {
           return Response.redirect(new URL("/", request.nextUrl));
@@ -37,6 +41,10 @@ export const authConfig = {
       }
 
       if (pathname.startsWith("/tasks") && !auth?.user.isAdmin) {
+        return Response.redirect(new URL("/", request.nextUrl));
+      }
+
+      if (pathname.startsWith("/tickets") && !auth?.user.isAdmin) {
         return Response.redirect(new URL("/", request.nextUrl));
       }
 
