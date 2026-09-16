@@ -236,3 +236,174 @@
     pointer-events: none;
   }
 }
+
+/* Login hero — subtelny ruch i przesunięcie barw (złoto / grafit) */
+@layer components {
+  .login-hero-wash {
+    background:
+      radial-gradient(ellipse 70% 55% at 18% 22%, rgba(201, 162, 39, 0.34), transparent 62%),
+      radial-gradient(ellipse 55% 45% at 82% 78%, rgba(120, 95, 30, 0.28), transparent 58%),
+      linear-gradient(135deg, #1a1610 0%, #141414 42%, #0f0f0f 100%);
+    animation: login-hero-wash-shift 18s ease-in-out infinite alternate;
+  }
+
+  .login-hero-grid {
+    background-image:
+      linear-gradient(0deg, rgba(0, 0, 0, 0.4), transparent 55%),
+      repeating-linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.035) 0 1px,
+        transparent 1px 72px
+      ),
+      repeating-linear-gradient(
+        0deg,
+        rgba(255, 255, 255, 0.035) 0 1px,
+        transparent 1px 72px
+      );
+    background-size: 100% 100%, 72px 72px, 72px 72px;
+    animation: login-hero-grid-drift 28s linear infinite;
+  }
+
+  .login-hero-glow {
+    filter: blur(8px);
+    opacity: 0.55;
+  }
+
+  .login-hero-glow-a {
+    background: radial-gradient(circle, rgba(201, 162, 39, 0.45), transparent 68%);
+    animation: login-hero-glow-float 14s ease-in-out infinite;
+  }
+
+  .login-hero-glow-b {
+    background: radial-gradient(circle, rgba(201, 162, 39, 0.22), transparent 70%);
+    animation: login-hero-glow-float 17s ease-in-out infinite reverse;
+  }
+
+  .login-hero-square {
+    transform-origin: center;
+    will-change: transform, opacity;
+  }
+
+  .login-hero-square-lg {
+    animation: login-hero-square-drift 22s ease-in-out infinite;
+  }
+
+  .login-hero-square-md {
+    animation: login-hero-square-pulse 11s ease-in-out infinite;
+  }
+
+  .login-hero-square-sm {
+    animation: login-hero-square-orbit 16s ease-in-out infinite;
+  }
+
+  .login-hero-square-xs {
+    animation: login-hero-square-pulse 9s ease-in-out infinite reverse;
+  }
+
+  .login-hero-accent-line {
+    animation: login-hero-line-pulse 4.5s ease-in-out infinite;
+  }
+
+  @keyframes login-hero-wash-shift {
+    0% {
+      filter: hue-rotate(0deg) saturate(1);
+      background-position: 0% 0%;
+    }
+    50% {
+      filter: hue-rotate(-8deg) saturate(1.15);
+    }
+    100% {
+      filter: hue-rotate(6deg) saturate(1.05);
+      background:
+        radial-gradient(ellipse 70% 55% at 28% 30%, rgba(201, 162, 39, 0.4), transparent 62%),
+        radial-gradient(ellipse 55% 45% at 70% 68%, rgba(90, 70, 20, 0.32), transparent 58%),
+        linear-gradient(145deg, #201810 0%, #121212 48%, #0c0c0c 100%);
+    }
+  }
+
+  @keyframes login-hero-grid-drift {
+    from {
+      background-position: 0 0, 0 0, 0 0;
+    }
+    to {
+      background-position: 0 0, 72px 36px, -36px 72px;
+    }
+  }
+
+  @keyframes login-hero-glow-float {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+      opacity: 0.45;
+    }
+    50% {
+      transform: translate3d(24px, -18px, 0) scale(1.08);
+      opacity: 0.7;
+    }
+  }
+
+  @keyframes login-hero-square-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(12deg);
+      opacity: 0.85;
+    }
+    50% {
+      transform: translate3d(-18px, -22px, 0) rotate(18deg);
+      opacity: 1;
+    }
+  }
+
+  @keyframes login-hero-square-pulse {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+      border-color: rgba(201, 162, 39, 0.45);
+    }
+    50% {
+      transform: translate3d(10px, -14px, 0) rotate(-4deg) scale(1.06);
+      border-color: rgba(201, 162, 39, 0.85);
+    }
+  }
+
+  @keyframes login-hero-square-orbit {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(0deg);
+      opacity: 0.55;
+    }
+    33% {
+      transform: translate3d(-16px, 12px, 0) rotate(6deg);
+      opacity: 0.85;
+    }
+    66% {
+      transform: translate3d(12px, -10px, 0) rotate(-5deg);
+      opacity: 0.7;
+    }
+  }
+
+  @keyframes login-hero-line-pulse {
+    0%,
+    100% {
+      width: 2.5rem;
+      opacity: 0.7;
+      background-color: rgba(201, 162, 39, 0.7);
+    }
+    50% {
+      width: 3.5rem;
+      opacity: 1;
+      background-color: rgba(201, 162, 39, 1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .login-hero-motion *,
+    .login-hero-wash,
+    .login-hero-grid,
+    .login-hero-glow,
+    .login-hero-square,
+    .login-hero-accent-line {
+      animation: none !important;
+    }
+  }
+}
