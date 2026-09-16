@@ -11,7 +11,8 @@ import {
 } from "@/lib/tickets";
 import { prisma } from "@/lib/prisma";
 
-export type NormalizedInboundEmail = {
+/** Uniwersalny obiekt e-maila dla webhooka i IMAP. */
+export type IncomingEmailInput = {
   fromEmail: string;
   fromName: string | null;
   toAddresses: string[];
@@ -19,7 +20,24 @@ export type NormalizedInboundEmail = {
   text: string | null;
   html: string | null;
   messageId: string | null;
+  /** Identyfikator zewnętrzny (np. Resend email_id) — używany przy deduplikacji. */
+  externalId?: string | null;
+};
+
+/** @deprecated Użyj IncomingEmailInput — alias dla kompatybilności. */
+export type NormalizedInboundEmail = IncomingEmailInput & {
   resendEmailId: string | null;
+};
+
+export type ProcessIncomingEmailResult = {
+  ticketId: string;
+  created: boolean;
+  duplicate: boolean;
+};
+
+export type ProcessIncomingEmailOptions = {
+  /** Wymusza zespół (np. skrzynka IMAP należąca do konkretnego teamu). */
+  preferredTeamId?: string | null;
 };
 
 function getResend() {
@@ -140,7 +158,7 @@ export function verifyInboundWebhook(request: Request, rawBody: string) {
   return false;
 }
 
-function normalizeFlatPayload(payload: Record<string, unknown>): NormalizedInboundEmail | null {
+function normalizeFlatPayload(payload: Record<string, unknown>): IncomingEmailInput | null {
   const fromRaw = asString(payload.from || payload.sender);
   const subject = asString(payload.subject);
   if (!fromRaw || !subject) {
@@ -154,6 +172,8 @@ function normalizeFlatPayload(payload: Record<string, unknown>): NormalizedInbou
     ...asStringArray(payload.received_for),
   ];
 
+  const externalId = asString(payload.email_id || payload.emailId) || null;
+
   return {
     fromEmail: parsedFrom.email,
     fromName: parsedFrom.name || asString(payload.from_name) || null,
@@ -164,20 +184,19 @@ function normalizeFlatPayload(payload: Record<string, unknown>): NormalizedInbou
     messageId:
       asString(payload.messageId || payload.message_id || payload["Message-Id"]) ||
       null,
-    resendEmailId: asString(payload.email_id || payload.emailId) || null,
+    externalId,
   };
 }
 
 export async function normalizeInboundPayload(
   payload: unknown,
-): Promise<NormalizedInboundEmail | null> {
+): Promise<IncomingEmailInput | null> {
   if (!payload || typeof payload !== "object") {
     return null;
   }
 
   const root = payload as Record<string, unknown>;
 
-  // Resend email.received event
   if (asString(root.type) === "email.received" && root.data && typeof root.data === "object") {
     const data = root.data as Record<string, unknown>;
     const emailId = asString(data.email_id);
@@ -227,17 +246,24 @@ export async function normalizeInboundPayload(
       text,
       html,
       messageId,
-      resendEmailId: emailId || null,
+      externalId: emailId || null,
     };
   }
 
   return normalizeFlatPayload(root);
 }
 
-export async function ingestInboundEmail(email: NormalizedInboundEmail) {
+/**
+ * Wspólna warstwa serwisowa dla webhooka i IMAP.
+ * Tworzy ticket albo dopina wiadomość do istniejącego wątku `[T-n]`.
+ */
+export async function processIncomingEmail(
+  email: IncomingEmailInput,
+  options: ProcessIncomingEmailOptions = {},
+): Promise<ProcessIncomingEmailResult> {
   const externalMessageId =
     email.messageId ||
-    email.resendEmailId ||
+    email.externalId ||
     `generated:${email.fromEmail}:${email.subject}:${email.text?.slice(0, 40) ?? ""}`;
 
   const existingMessage = await prisma.ticketMessage.findUnique({
@@ -246,11 +272,17 @@ export async function ingestInboundEmail(email: NormalizedInboundEmail) {
   });
 
   if (existingMessage) {
-    return { ticketId: existingMessage.ticketId, created: false as const };
+    return {
+      ticketId: existingMessage.ticketId,
+      created: false,
+      duplicate: true,
+    };
   }
 
   const ticketNumber = parseTicketRef(email.subject);
-  const team = await findTeamByInboundAddress(email.toAddresses);
+  const matchedTeam = await findTeamByInboundAddress(email.toAddresses);
+  const teamId = options.preferredTeamId ?? matchedTeam?.id ?? null;
+
   const bodyText =
     email.text?.trim() ||
     (email.html
@@ -287,14 +319,14 @@ export async function ingestInboundEmail(email: NormalizedInboundEmail) {
         }),
       ]);
 
-      if (team) {
+      if (teamId) {
         await prisma.ticket.updateMany({
           where: { id: ticket.id, teamId: null },
-          data: { teamId: team.id },
+          data: { teamId },
         });
       }
 
-      return { ticketId: ticket.id, created: false as const };
+      return { ticketId: ticket.id, created: false, duplicate: false };
     }
   }
 
@@ -305,7 +337,7 @@ export async function ingestInboundEmail(email: NormalizedInboundEmail) {
       subject: subject.slice(0, 255),
       requesterEmail: email.fromEmail,
       requesterName: email.fromName,
-      teamId: team?.id ?? null,
+      teamId,
       lastMessageAt: new Date(),
       messages: {
         create: {
@@ -326,5 +358,27 @@ export async function ingestInboundEmail(email: NormalizedInboundEmail) {
     `[inbound-email] nowy ticket ${formatTicketId(created.number)} od ${email.fromEmail}`,
   );
 
-  return { ticketId: created.id, created: true as const };
+  return { ticketId: created.id, created: true, duplicate: false };
+}
+
+/** Alias kompatybilności wstecznej. */
+export async function ingestInboundEmail(
+  email: IncomingEmailInput | NormalizedInboundEmail,
+  options?: ProcessIncomingEmailOptions,
+) {
+  const normalized: IncomingEmailInput = {
+    fromEmail: email.fromEmail,
+    fromName: email.fromName,
+    toAddresses: email.toAddresses,
+    subject: email.subject,
+    text: email.text,
+    html: email.html,
+    messageId: email.messageId,
+    externalId:
+      email.externalId ??
+      ("resendEmailId" in email ? email.resendEmailId : null) ??
+      null,
+  };
+
+  return processIncomingEmail(normalized, options);
 }

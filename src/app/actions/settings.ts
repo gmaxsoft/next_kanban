@@ -2,6 +2,7 @@
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import type { z } from "zod";
 
 import { requireAdmin } from "@/lib/auth-utils";
 import { prisma } from "@/lib/prisma";
@@ -156,19 +157,50 @@ export async function deleteRole(
   return { success: "Usunięto rolę." };
 }
 
+function parseTeamFormData(formData: FormData, options?: { keepImapPassword?: boolean }) {
+  const description = String(formData.get("description") ?? "").trim();
+  const inboundEmail = String(formData.get("inboundEmail") ?? "").trim();
+  const inboundType = String(formData.get("inboundType") ?? "WEBHOOK");
+  const imapPortRaw = String(formData.get("imapPort") ?? "993").trim();
+
+  return teamSchema.safeParse({
+    name: String(formData.get("name") ?? ""),
+    description: description || undefined,
+    inboundEmail: inboundEmail || "",
+    inboundType: inboundType === "IMAP" ? "IMAP" : "WEBHOOK",
+    imapHost: String(formData.get("imapHost") ?? "").trim(),
+    imapPort: imapPortRaw || 993,
+    imapUser: String(formData.get("imapUser") ?? "").trim(),
+    imapPassword: String(formData.get("imapPassword") ?? ""),
+    imapSecure: String(formData.get("imapSecure") ?? "true") === "false" ? "false" : "true",
+    imapMailbox: String(formData.get("imapMailbox") ?? "").trim() || "INBOX",
+    keepImapPassword: options?.keepImapPassword ?? false,
+  });
+}
+
+function teamInboundData(parsed: z.infer<typeof teamSchema>, existingPassword?: string | null) {
+  const isImap = parsed.inboundType === "IMAP";
+  return {
+    inboundEmail: parsed.inboundEmail || null,
+    inboundType: parsed.inboundType,
+    imapHost: isImap ? parsed.imapHost || null : null,
+    imapPort: isImap ? parsed.imapPort : null,
+    imapUser: isImap ? parsed.imapUser || null : null,
+    imapPassword: isImap
+      ? parsed.imapPassword || existingPassword || null
+      : null,
+    imapSecure: isImap ? parsed.imapSecure === "true" : true,
+    imapMailbox: isImap ? parsed.imapMailbox || "INBOX" : null,
+  };
+}
+
 export async function createTeam(
   _prev: SettingsActionState,
   formData: FormData,
 ): Promise<SettingsActionState> {
   await requireAdmin();
 
-  const description = String(formData.get("description") ?? "").trim();
-  const inboundEmail = String(formData.get("inboundEmail") ?? "").trim();
-  const parsed = teamSchema.safeParse({
-    name: String(formData.get("name") ?? ""),
-    description: description || undefined,
-    inboundEmail: inboundEmail || "",
-  });
+  const parsed = parseTeamFormData(formData);
 
   if (!parsed.success) {
     return { error: firstZodError(parsed.error) };
@@ -179,7 +211,7 @@ export async function createTeam(
       data: {
         name: parsed.data.name,
         description: parsed.data.description,
-        inboundEmail: parsed.data.inboundEmail || null,
+        ...teamInboundData(parsed.data),
       },
     });
   } catch (error) {
@@ -202,26 +234,41 @@ export async function updateTeam(
 ): Promise<SettingsActionState> {
   await requireAdmin();
 
-  const description = String(formData.get("description") ?? "").trim();
-  const inboundEmail = String(formData.get("inboundEmail") ?? "").trim();
-  const parsed = updateTeamSchema.safeParse({
-    teamId: String(formData.get("teamId") ?? ""),
-    name: String(formData.get("name") ?? ""),
-    description: description || undefined,
-    inboundEmail: inboundEmail || "",
+  const teamId = String(formData.get("teamId") ?? "");
+  const passwordInput = String(formData.get("imapPassword") ?? "");
+  const existing = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { imapPassword: true },
   });
 
-  if (!parsed.success) {
-    return { error: firstZodError(parsed.error) };
+  if (!existing) {
+    return { error: "Nie znaleziono zespołu." };
+  }
+
+  const formParsed = parseTeamFormData(formData, {
+    keepImapPassword: !passwordInput && Boolean(existing.imapPassword),
+  });
+
+  if (!formParsed.success) {
+    return { error: firstZodError(formParsed.error) };
+  }
+
+  const withId = updateTeamSchema.safeParse({
+    teamId,
+    ...formParsed.data,
+  });
+
+  if (!withId.success) {
+    return { error: firstZodError(withId.error) };
   }
 
   try {
     await prisma.team.update({
-      where: { id: parsed.data.teamId },
+      where: { id: withId.data.teamId },
       data: {
-        name: parsed.data.name,
-        description: parsed.data.description ?? null,
-        inboundEmail: parsed.data.inboundEmail || null,
+        name: withId.data.name,
+        description: withId.data.description ?? null,
+        ...teamInboundData(withId.data, existing.imapPassword),
       },
     });
   } catch (error) {

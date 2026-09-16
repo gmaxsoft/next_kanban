@@ -1,6 +1,11 @@
 # Tickety — konfiguracja i użycie
 
-System ticketów tworzy zgłoszenia z **przychodzących e-maili** (Resend Inbound / JSON webhook). Każdy zespół może mieć własną skrzynkę (np. `it@pwginfo.pl`, `hr@firma.pl`). Odpowiedzi z panelu idą do klienta przez Resend z numerem ticketu w temacie (`[T-101]`).
+System ticketów tworzy zgłoszenia z **przychodzących e-maili**. Dostępne są **dwie metody odbioru**, które korzystają z tej samej warstwy serwisowej `processIncomingEmail`:
+
+1. **Webhook** — `POST /api/webhooks/inbound-email` (Resend Inbound / JSON)
+2. **IMAP** — `GET|POST /api/cron/check-imap` (poll skrzynek zespołów z `inboundType=IMAP`)
+
+Każdy zespół może mieć własną skrzynkę (np. `it@pwginfo.pl`). Odpowiedzi z panelu idą do klienta przez Resend z numerem ticketu w temacie (`[T-101]`).
 
 Dostęp do `/tickets` mają tylko konta **ADMINISTRATOR**.
 
@@ -10,12 +15,17 @@ Dostęp do `/tickets` mają tylko konta **ADMINISTRATOR**.
 
 1. Ustaw zmienne w `.env` (patrz niżej).
 2. Uruchom migracje: `npx prisma migrate deploy`.
-3. W **Ustawienia → Zespoły** wpisz skrzynkę ticketów dla zespołu (np. `it@pwginfo.pl`).
-4. Skonfiguruj webhook u dostawcy e-mail na URL:
+3. W **Ustawienia → Zespoły** wybierz tryb **Webhook** lub **IMAP** i uzupełnij skrzynkę / dane IMAP.
+4. Dla webhooka skonfiguruj URL u dostawcy:
 
    `https://TWOJA-DOMENA/api/webhooks/inbound-email`
 
-5. Przetestuj lokalnie (sekcja „Test lokalny”).
+5. Dla IMAP ustaw cron na:
+
+   `https://TWOJA-DOMENA/api/cron/check-imap`  
+   z nagłówkiem `Authorization: Bearer CRON_SECRET`
+
+6. Przetestuj lokalnie (sekcje „Test lokalny” / „Test IMAP”).
 
 ---
 
@@ -23,37 +33,99 @@ Dostęp do `/tickets` mają tylko konta **ADMINISTRATOR**.
 
 | Zmienna | Opis |
 | --- | --- |
-| `RESEND_API_KEY` | Klucz API Resend — potrzebny do **pobierania treści** maili Inbound oraz **wysyłki odpowiedzi** |
-| `EMAIL_FROM` | Adres nadawcy odpowiedzi (zweryfikowana domena w Resend) |
-| `RESEND_WEBHOOK_SECRET` | Signing secret webhooka Resend (nagłówki Svix: `svix-id`, `svix-timestamp`, `svix-signature`) |
-| `INBOUND_EMAIL_WEBHOOK_SECRET` | Alternatywa / testy: `Authorization: Bearer …` lub nagłówek `x-webhook-secret` |
-| `AUTH_URL` | Publiczny URL aplikacji (linki w mailach) |
-
-Przykład w `.env`:
+| `RESEND_API_KEY` | Klucz API Resend — treść Inbound + wysyłka odpowiedzi |
+| `EMAIL_FROM` | Adres nadawcy odpowiedzi |
+| `RESEND_WEBHOOK_SECRET` | Signing secret webhooka Resend (Svix) |
+| `INBOUND_EMAIL_WEBHOOK_SECRET` | Bearer / `x-webhook-secret` dla prostego JSON |
+| `CRON_SECRET` | Bearer dla `/api/cron/check-imap` |
+| `AUTH_URL` | Publiczny URL aplikacji |
 
 ```env
 RESEND_API_KEY="re_..."
 EMAIL_FROM="Support <support@twoja-domena.pl>"
 RESEND_WEBHOOK_SECRET="whsec_..."
 INBOUND_EMAIL_WEBHOOK_SECRET="silny-losowy-sekret"
+CRON_SECRET="silny-losowy-cron-sekret"
 AUTH_URL="https://kanban.twoja-domena.pl"
 ```
 
-**Bezpieczeństwo:** w produkcji ustaw przynajmniej jeden z sekretów (`RESEND_WEBHOOK_SECRET` lub `INBOUND_EMAIL_WEBHOOK_SECRET`). Bez nich weryfikacja działa tylko w `NODE_ENV=development` (z ostrzeżeniem w logach).
+**Bezpieczeństwo:** w produkcji ustaw sekrety. Webhook i cron są poza sesją Auth.js — chroni je wyłącznie Bearer / podpis Svix.
 
-Endpoint webhooka jest **publiczny** (bez sesji Auth.js) — chroni go wyłącznie weryfikacja podpisu / sekretu.
+---
+
+## Wspólna logika (`processIncomingEmail`)
+
+Plik: `src/lib/inbound-email.ts`
+
+Obie ścieżki (webhook i IMAP) normalizują e-mail do obiektu:
+
+- `fromEmail`, `fromName`
+- `toAddresses`
+- `subject`, `text`, `html`
+- `messageId` / `externalId` (deduplikacja)
+
+Następnie wywołują `processIncomingEmail(...)`, która:
+
+- tworzy nowy ticket albo dopina wiadomość do wątku `[T-n]`,
+- pomija duplikaty po `Message-ID`,
+- opcjonalnie ustawia `preferredTeamId` (IMAP zawsze przypina zespół właściciela skrzynki).
 
 ---
 
 ## Mapowanie skrzynki → zespół
 
 1. Zaloguj się jako ADMINISTRATOR.
-2. Otwórz **Ustawienia → Zespoły**.
-3. Przy tworzeniu / edycji zespołu uzupełnij pole **Skrzynka ticketów** pełnym adresem, np. `it@pwginfo.pl`.
+2. **Ustawienia → Zespoły** → utwórz / edytuj zespół.
+3. Uzupełnij **Skrzynka ticketów** oraz **Tryb odbioru**:
+   - **Webhook** — maile trafiają przez Resend/JSON na wspólny endpoint; zespół wybierany po adresie `to`.
+   - **IMAP** — podaj host, port, użytkownika, hasło, TLS, folder (`INBOX`); cron odpytuje tylko te zespoły.
 
-Gdy przyjdzie mail na ten adres (pole `to` / `received_for` w payloadzie), nowy ticket dostanie ten zespół automatycznie. Lokalna część adresu (`it`) też jest dopasowywana, jeśli pełny adres się nie zgadza.
+---
 
-Możesz później zmienić zespół na stronie szczegółów ticketu — przed utworzeniem karty Kanban.
+## Konfiguracja IMAP + cron
+
+1. W zespole ustaw `inboundType = IMAP` i dane dostępowe.
+2. Ustaw `CRON_SECRET` w `.env`.
+3. Wywołuj okresowo (co 1–5 minut):
+
+```bash
+curl -X POST "https://TWOJA-DOMENA/api/cron/check-imap" ^
+  -H "Authorization: Bearer TWOJ_CRON_SECRET"
+```
+
+Endpoint:
+
+- łączy się przez **imapflow** ze wszystkimi zespołami IMAP,
+- pobiera **UNSEEN**,
+- parsuje treść (**mailparser**),
+- woła `processIncomingEmail`,
+- oznacza mail jako **`\Seen`** po sukcesie,
+- zawsze wywołuje `client.logout()` (zamyka socket).
+
+Przykład crona systemowego:
+
+```cron
+*/2 * * * * curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://TWOJA-DOMENA/api/cron/check-imap
+```
+
+Vercel Cron (jeśli hostujesz na Vercel) — dodaj job wskazujący na ten URL i przekaż sekret w nagłówku zgodnie z dokumentacją platformy.
+
+### Test IMAP lokalnie
+
+```bash
+curl -X POST http://localhost:3000/api/cron/check-imap ^
+  -H "Authorization: Bearer TWOJ_CRON_SECRET"
+```
+
+Oczekiwana odpowiedź:
+
+```json
+{
+  "ok": true,
+  "totals": { "teams": 1, "fetched": 2, "created": 1, "appended": 1, "duplicates": 0, "errors": 0 },
+  "mailboxes": [ ... ]
+}
+```
 
 ---
 
@@ -170,12 +242,14 @@ Do testów z internetu (Resend → localhost) użyj tunelu (ngrok, Cloudflare Tu
 
 | Ścieżka | Rola |
 | --- | --- |
-| `src/app/api/webhooks/inbound-email/route.ts` | Endpoint POST |
-| `src/lib/inbound-email.ts` | Weryfikacja, normalizacja payloadu, ingest |
+| `src/lib/inbound-email.ts` | `processIncomingEmail`, normalizacja, weryfikacja webhooka |
+| `src/lib/imap-inbox.ts` | Poll IMAP (imapflow + mailparser) |
+| `src/app/api/webhooks/inbound-email/route.ts` | Webhook POST |
+| `src/app/api/cron/check-imap/route.ts` | Cron IMAP |
 | `src/lib/tickets.ts` | Numery `[T-n]`, listy, kolumna To Do |
 | `src/app/actions/tickets.ts` | Status, odpowiedź, notatka, create task |
 | `src/app/(app)/tickets/` | UI listy i szczegółów |
-| `prisma/schema.prisma` | modele `Ticket`, `TicketMessage`; `Team.inboundEmail` |
+| `prisma/schema.prisma` | `Ticket`, `Team.inboundType`, pola IMAP |
 
 ---
 
@@ -184,8 +258,10 @@ Do testów z internetu (Resend → localhost) użyj tunelu (ngrok, Cloudflare Tu
 | Objaw | Co sprawdzić |
 | --- | --- |
 | `401 Unauthorized webhook` | Sekret / nagłówki Svix; raw body przy weryfikacji |
-| Ticket bez treści | `RESEND_API_KEY` + dostęp do Receiving API |
-| Ticket bez zespołu | `inboundEmail` w Ustawieniach zgodny z `to` |
-| Odpowiedź nie dochodzi | `RESEND_API_KEY`, `EMAIL_FROM`, weryfikacja domeny |
-| Brak menu Tickety | Konto bez roli ADMINISTRATOR |
-| Duplikat nie tworzy drugiego ticketu | Ten sam `messageId` — zamierzone |
+| `401` na `/api/cron/check-imap` | `Authorization: Bearer CRON_SECRET` |
+| Ticket bez treści (Resend) | `RESEND_API_KEY` + Receiving API |
+| IMAP: 0 fetched | `inboundType=IMAP`, host/user/hasło, folder, UNSEEN |
+| IMAP: błędy połączenia | port/TLS, firewall, app password |
+| Ticket bez zespołu (webhook) | `inboundEmail` zgodny z `to` |
+| Odpowiedź nie dochodzi | `RESEND_API_KEY`, `EMAIL_FROM`, domena |
+| Duplikat nie tworzy drugiego ticketu | Ten sam `Message-ID` — zamierzone |

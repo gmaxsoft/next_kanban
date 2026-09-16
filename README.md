@@ -82,6 +82,11 @@ INBOUND_EMAIL_WEBHOOK_SECRET=""
 
 SOCKET_PORT="3001"
 NEXT_PUBLIC_SOCKET_URL="http://localhost:3001"
+
+# Licencja instalacji — nazwa firmy na ekranie logowania
+LICENSE_COMPANY_NAME="Nazwa Firmy Sp. z o.o."
+LICENSE_VENDOR_NAME="MaxSoft.pl"
+LICENSE_AUTHOR_NAME="MaxSoft.pl"
 ```
 
 Utwórz bazę `kanban_db` (lub inną, zgodną z `DATABASE_URL`).
@@ -157,7 +162,7 @@ Dla ticketów ustaw publiczny URL webhooka u Resend (lub innego providera) oraz 
 - **Kanban** — widok tablicy i listy; przeciąganie zadań między kolumnami; filtry i paginacja list.
 - **Szczegóły zadania** — dedykowana strona z opisem TipTap, assignee, terminem i komentarzami; `@imię` w komentarzu wysyła e-mail i tworzy powiadomienie w aplikacji.
 - **Powiadomienia** — dzwonek w nagłówku (nieprzeczytane, oznaczanie jako przeczytane); także e-mail przy przypisaniu i komentarzu (Resend, wysyłka w tle).
-- **Tickety** — maile przychodzące → zgłoszenia `[T-n]`; odpowiedź z panelu; powiązanie z kartą Kanban. Instrukcja: [docs/TICKETS.md](./docs/TICKETS.md).
+- **Tickety** — webhook lub IMAP → zgłoszenia `[T-n]`; wspólna `processIncomingEmail`; odpowiedź z panelu; karta Kanban. Instrukcja: [docs/TICKETS.md](./docs/TICKETS.md).
 - **Wyszukiwanie** — pole w nagłówku szuka tablic i zadań (wyniki zależne od roli).
 - **Pulpit** — ADMIN widzi statystyki całego systemu; Pracownik — własne zadania i skróty zespołu.
 - **Czat** — historia w MySQL, WebSocket, status Online/Offline.

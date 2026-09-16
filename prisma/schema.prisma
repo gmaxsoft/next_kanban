@@ -25,6 +25,11 @@ enum TicketMessageKind {
   INTERNAL
 }
 
+enum InboundType {
+  WEBHOOK
+  IMAP
+}
+
 model AppRole {
   id        String   @id @default(uuid()) @db.Char(36)
   name      String   @unique
@@ -40,11 +45,18 @@ model AppRole {
 }
 
 model Team {
-  id           String   @id @default(uuid()) @db.Char(36)
-  name         String   @unique
-  description  String?  @db.VarChar(255)
-  inboundEmail String?  @unique @db.VarChar(255)
-  createdAt    DateTime @default(now())
+  id           String      @id @default(uuid()) @db.Char(36)
+  name         String      @unique
+  description  String?     @db.VarChar(255)
+  inboundEmail String?     @unique @db.VarChar(255)
+  inboundType  InboundType @default(WEBHOOK)
+  imapHost     String?     @db.VarChar(255)
+  imapPort     Int?        @default(993)
+  imapUser     String?     @db.VarChar(255)
+  imapPassword String?     @db.VarChar(255)
+  imapSecure   Boolean     @default(true)
+  imapMailbox  String?     @db.VarChar(120)
+  createdAt    DateTime    @default(now())
 
   users        User[]
   boards       Board[]
@@ -52,6 +64,7 @@ model Team {
   tickets      Ticket[]
 
   @@index([name])
+  @@index([inboundType])
 }
 
 model User {

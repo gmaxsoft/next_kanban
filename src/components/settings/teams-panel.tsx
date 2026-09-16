@@ -27,8 +27,145 @@ export type TeamRow = {
   name: string;
   description: string | null;
   inboundEmail: string | null;
+  inboundType: "WEBHOOK" | "IMAP";
+  imapHost: string | null;
+  imapPort: number | null;
+  imapUser: string | null;
+  imapSecure: boolean;
+  imapMailbox: string | null;
+  hasImapPassword: boolean;
   userCount: number;
 };
+
+const selectClassName =
+  "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+
+function InboundFields({
+  idPrefix,
+  defaults,
+}: {
+  idPrefix: string;
+  defaults?: Partial<TeamRow>;
+}) {
+  const [inboundType, setInboundType] = useState<"WEBHOOK" | "IMAP">(
+    defaults?.inboundType ?? "WEBHOOK",
+  );
+
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-inbound`}>Skrzynka ticketów</Label>
+        <Input
+          id={`${idPrefix}-inbound`}
+          name="inboundEmail"
+          type="email"
+          maxLength={255}
+          defaultValue={defaults?.inboundEmail ?? ""}
+          placeholder="np. it@pwginfo.pl"
+        />
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-inbound-type`}>Tryb odbioru</Label>
+        <select
+          id={`${idPrefix}-inbound-type`}
+          name="inboundType"
+          className={selectClassName}
+          value={inboundType}
+          onChange={(event) =>
+            setInboundType(event.target.value === "IMAP" ? "IMAP" : "WEBHOOK")
+          }
+        >
+          <option value="WEBHOOK">Webhook (Resend / JSON)</option>
+          <option value="IMAP">IMAP (poll cron)</option>
+        </select>
+      </div>
+
+      {inboundType === "IMAP" ? (
+        <div className="grid gap-3 rounded-lg border border-dashed p-3">
+          <p className="text-xs text-muted-foreground">
+            Cron `GET/POST /api/cron/check-imap` pobiera nieprzeczytane maile
+            (Authorization: Bearer CRON_SECRET).
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor={`${idPrefix}-imap-host`}>Host IMAP</Label>
+              <Input
+                id={`${idPrefix}-imap-host`}
+                name="imapHost"
+                defaultValue={defaults?.imapHost ?? ""}
+                placeholder="imap.example.com"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${idPrefix}-imap-port`}>Port</Label>
+              <Input
+                id={`${idPrefix}-imap-port`}
+                name="imapPort"
+                type="number"
+                defaultValue={defaults?.imapPort ?? 993}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${idPrefix}-imap-secure`}>TLS/SSL</Label>
+              <select
+                id={`${idPrefix}-imap-secure`}
+                name="imapSecure"
+                className={selectClassName}
+                defaultValue={defaults?.imapSecure === false ? "false" : "true"}
+              >
+                <option value="true">Tak (zalecane)</option>
+                <option value="false">Nie</option>
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${idPrefix}-imap-user`}>Użytkownik</Label>
+              <Input
+                id={`${idPrefix}-imap-user`}
+                name="imapUser"
+                defaultValue={defaults?.imapUser ?? ""}
+                placeholder="it@pwginfo.pl"
+                autoComplete="off"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor={`${idPrefix}-imap-pass`}>Hasło</Label>
+              <Input
+                id={`${idPrefix}-imap-pass`}
+                name="imapPassword"
+                type="password"
+                placeholder={
+                  defaults?.hasImapPassword
+                    ? "Pozostaw puste, aby nie zmieniać"
+                    : "Hasło / app password"
+                }
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor={`${idPrefix}-imap-mailbox`}>Folder</Label>
+              <Input
+                id={`${idPrefix}-imap-mailbox`}
+                name="imapMailbox"
+                defaultValue={defaults?.imapMailbox ?? "INBOX"}
+                placeholder="INBOX"
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <input type="hidden" name="imapHost" value="" />
+          <input type="hidden" name="imapPort" value="993" />
+          <input type="hidden" name="imapUser" value="" />
+          <input type="hidden" name="imapPassword" value="" />
+          <input type="hidden" name="imapSecure" value="true" />
+          <input type="hidden" name="imapMailbox" value="INBOX" />
+        </>
+      )}
+    </div>
+  );
+}
 
 export function TeamsPanel({
   teams,
@@ -52,49 +189,40 @@ export function TeamsPanel({
     return (
       team.name.toLowerCase().includes(q) ||
       (team.description ?? "").toLowerCase().includes(q) ||
-      (team.inboundEmail ?? "").toLowerCase().includes(q)
+      (team.inboundEmail ?? "").toLowerCase().includes(q) ||
+      team.inboundType.toLowerCase().includes(q)
     );
   });
 
   return (
     <div className="grid gap-6">
       {canManage ? (
-        <form
-          action={createAction}
-          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"
-        >
-          <div className="grid gap-2">
-            <Label htmlFor="team-name">Nowy zespół</Label>
-            <Input
-              id="team-name"
-              name="name"
-              required
-              maxLength={80}
-              placeholder="np. Marketing"
-            />
+        <form action={createAction} className="grid gap-3 rounded-xl border p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="team-name">Nowy zespół</Label>
+              <Input
+                id="team-name"
+                name="name"
+                required
+                maxLength={80}
+                placeholder="np. IT"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="team-description">Opis</Label>
+              <Input
+                id="team-description"
+                name="description"
+                maxLength={255}
+                placeholder="Opcjonalnie"
+              />
+            </div>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="team-description">Opis</Label>
-            <Input
-              id="team-description"
-              name="description"
-              maxLength={255}
-              placeholder="Opcjonalnie"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="team-inbound">Skrzynka ticketów</Label>
-            <Input
-              id="team-inbound"
-              name="inboundEmail"
-              type="email"
-              maxLength={255}
-              placeholder="np. it@pwginfo.pl"
-            />
-          </div>
-          <Button type="submit" disabled={createPending}>
+          <InboundFields idPrefix="team-create" />
+          <Button type="submit" disabled={createPending} className="w-fit">
             <Plus />
-            {createPending ? "Dodawanie..." : "Dodaj"}
+            {createPending ? "Dodawanie..." : "Dodaj zespół"}
           </Button>
         </form>
       ) : (
@@ -109,17 +237,17 @@ export function TeamsPanel({
           id="teams-filter"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Szukaj po nazwie lub opisie..."
+          placeholder="Szukaj po nazwie, skrzynce lub trybie..."
         />
       </div>
 
       <div className="overflow-x-auto border border-border">
-        <table className="w-full min-w-[32rem] text-left text-sm">
+        <table className="w-full min-w-[40rem] text-left text-sm">
           <thead className="border-b bg-muted/40 text-muted-foreground">
             <tr>
               <th className="px-3 py-2 font-medium">Nazwa</th>
-              <th className="px-3 py-2 font-medium">Opis</th>
               <th className="px-3 py-2 font-medium">Skrzynka</th>
+              <th className="px-3 py-2 font-medium">Tryb</th>
               <th className="px-3 py-2 font-medium">Członkowie</th>
               {canManage ? (
                 <th className="px-3 py-2 font-medium">Akcje</th>
@@ -139,12 +267,17 @@ export function TeamsPanel({
             ) : (
               filteredTeams.map((team) => (
                 <tr key={team.id} className="border-b last:border-0">
-                  <td className="px-3 py-2.5 font-medium">{team.name}</td>
-                  <td className="px-3 py-2.5 text-muted-foreground">
-                    {team.description || "—"}
+                  <td className="px-3 py-2.5">
+                    <div className="font-medium">{team.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {team.description || "—"}
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 text-muted-foreground">
                     {team.inboundEmail || "—"}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {team.inboundType === "IMAP" ? "IMAP" : "Webhook"}
                   </td>
                   <td className="px-3 py-2.5">{team.userCount}</td>
                   {canManage ? (
@@ -195,7 +328,7 @@ function EditTeamButton({ team }: { team: TeamRow }) {
         Edytuj
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent showCloseButton className="w-full sm:max-w-md">
+        <SheetContent showCloseButton className="w-full overflow-y-auto sm:max-w-lg">
           <SheetHeader className="border-b">
             <SheetTitle>Edycja zespołu</SheetTitle>
             <SheetDescription>{team.name}</SheetDescription>
@@ -219,18 +352,7 @@ function EditTeamButton({ team }: { team: TeamRow }) {
                 defaultValue={team.description ?? ""}
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor={`team-edit-inbound-${team.id}`}>
-                Skrzynka ticketów
-              </Label>
-              <Input
-                id={`team-edit-inbound-${team.id}`}
-                name="inboundEmail"
-                type="email"
-                defaultValue={team.inboundEmail ?? ""}
-                placeholder="np. it@pwginfo.pl"
-              />
-            </div>
+            <InboundFields idPrefix={`team-edit-${team.id}`} defaults={team} />
             <Button type="submit" disabled={pending} className="w-fit">
               {pending ? "Zapisywanie..." : "Zapisz"}
             </Button>

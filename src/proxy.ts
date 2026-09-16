@@ -22,6 +22,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname.startsWith("/api/cron/")) {
+    return NextResponse.next();
+  }
+
   if (isLogin) {
     if (isLoggedIn) {
       return NextResponse.redirect(new URL("/", request.url));

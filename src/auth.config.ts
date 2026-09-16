@@ -28,6 +28,10 @@ export const authConfig = {
         return true;
       }
 
+      if (pathname.startsWith("/api/cron/")) {
+        return true;
+      }
+
       if (isPublicRoute) {
         if (isLoggedIn) {
           return Response.redirect(new URL("/", request.nextUrl));

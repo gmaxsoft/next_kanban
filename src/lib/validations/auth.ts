@@ -84,22 +84,58 @@ export const updateRoleSchema = roleSchema.extend({
   roleId: z.string().uuid(),
 });
 
-export const teamSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(2, "Nazwa zespołu musi mieć co najmniej 2 znaki")
-    .max(80, "Nazwa zespołu może mieć maksymalnie 80 znaków"),
-  description: z
-    .string()
-    .trim()
-    .max(255, "Opis może mieć maksymalnie 255 znaków")
-    .optional(),
-  inboundEmail: z.union([
-    z.literal(""),
-    z.string().trim().email("Podaj poprawny adres e-mail skrzynki").max(255),
-  ]),
-});
+export const teamSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(2, "Nazwa zespołu musi mieć co najmniej 2 znaki")
+      .max(80, "Nazwa zespołu może mieć maksymalnie 80 znaków"),
+    description: z
+      .string()
+      .trim()
+      .max(255, "Opis może mieć maksymalnie 255 znaków")
+      .optional(),
+    inboundEmail: z.union([
+      z.literal(""),
+      z.string().trim().email("Podaj poprawny adres e-mail skrzynki").max(255),
+    ]),
+    inboundType: z.enum(["WEBHOOK", "IMAP"]).default("WEBHOOK"),
+    imapHost: z.union([z.literal(""), z.string().trim().max(255)]),
+    imapPort: z.coerce.number().int().min(1).max(65535).default(993),
+    imapUser: z.union([z.literal(""), z.string().trim().max(255)]),
+    imapPassword: z.union([z.literal(""), z.string().max(255)]),
+    imapSecure: z.enum(["true", "false"]).default("true"),
+    imapMailbox: z.union([z.literal(""), z.string().trim().max(120)]),
+    keepImapPassword: z.boolean().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.inboundType !== "IMAP") {
+      return;
+    }
+
+    if (!data.imapHost.trim()) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["imapHost"],
+        message: "Podaj host IMAP.",
+      });
+    }
+    if (!data.imapUser.trim()) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["imapUser"],
+        message: "Podaj użytkownika IMAP.",
+      });
+    }
+    if (!data.imapPassword && !data.keepImapPassword) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["imapPassword"],
+        message: "Podaj hasło IMAP.",
+      });
+    }
+  });
 
 export const updateTeamSchema = teamSchema.extend({
   teamId: z.string().uuid(),

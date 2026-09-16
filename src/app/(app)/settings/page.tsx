@@ -54,7 +54,7 @@ export default async function SettingsPage() {
             <CardHeader>
               <CardTitle>Zespoły</CardTitle>
               <CardDescription>
-                Organizuj ludzi w zespoły — czat działa w obrębie wybranego zespołu.
+                Zespoły, skrzynki ticketów (Webhook lub IMAP) oraz czat.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -65,6 +65,13 @@ export default async function SettingsPage() {
                   name: team.name,
                   description: team.description,
                   inboundEmail: team.inboundEmail,
+                  inboundType: team.inboundType,
+                  imapHost: team.imapHost,
+                  imapPort: team.imapPort,
+                  imapUser: team.imapUser,
+                  imapSecure: team.imapSecure,
+                  imapMailbox: team.imapMailbox,
+                  hasImapPassword: Boolean(team.imapPassword),
                   userCount: team._count.users,
                 }))}
               />
