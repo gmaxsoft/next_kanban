@@ -187,4 +187,5 @@ src/lib/                Prisma, auth, mail, inbound-email, tickets, …
 | Dokument | Opis |
 | --- | --- |
 | [README.md](./README.md) | Uruchomienie aplikacji, stack, skrót funkcji |
-| [docs/TICKETS.md](./docs/TICKETS.md) | Tickety: webhook, Resend, skrzynki zespołów, panel, testy |
+| [docs/TICKETS.md](./docs/TICKETS.md) | Tickety: webhook, IMAP, skrzynki zespołów, panel |
+| [docs/TESTING.md](./docs/TESTING.md) | Testy jednostkowe, integracyjne i E2E (Playwright) |

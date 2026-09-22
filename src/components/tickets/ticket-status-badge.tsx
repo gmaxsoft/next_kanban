@@ -1,12 +1,7 @@
 import type { TicketStatus } from "@prisma/client";
 
 import { Badge } from "@/components/ui/badge";
-
-const labels: Record<TicketStatus, string> = {
-  OPEN: "Otwarte",
-  IN_PROGRESS: "W trakcie",
-  RESOLVED: "Rozwiązane",
-};
+import { ticketStatusLabel } from "@/lib/ticket-status";
 
 const variants: Record<
   TicketStatus,
@@ -18,9 +13,7 @@ const variants: Record<
 };
 
 export function TicketStatusBadge({ status }: { status: TicketStatus }) {
-  return <Badge variant={variants[status]}>{labels[status]}</Badge>;
+  return <Badge variant={variants[status]}>{ticketStatusLabel(status)}</Badge>;
 }
 
-export function ticketStatusLabel(status: TicketStatus) {
-  return labels[status];
-}
+export { ticketStatusLabel } from "@/lib/ticket-status";
