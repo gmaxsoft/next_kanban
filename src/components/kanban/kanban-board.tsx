@@ -19,6 +19,7 @@ import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useRouter } from "next/navigation";
 
 import { moveTask } from "@/app/actions/boards";
+import { AddTaskForm } from "@/components/kanban/add-task-form";
 import { KanbanColumn } from "@/components/kanban/board-column";
 import { TaskCard } from "@/components/kanban/task-card";
 import type { BoardView } from "@/lib/board-query";
@@ -312,6 +313,9 @@ export function KanbanBoard({
                   </button>
                 ))}
               </div>
+              {canCreateTasks ? (
+                <AddTaskForm boardId={boardId} columnId={column.id} />
+              ) : null}
             </section>
           ))}
         </div>

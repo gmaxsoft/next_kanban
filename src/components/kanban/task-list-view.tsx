@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { PriorityBadge } from "@/components/kanban/priority-badge";
@@ -108,7 +109,12 @@ export function TaskListView({
               role="link"
             >
               <td className="px-3 py-3 align-top">
-                <p className="font-medium">{row.title}</p>
+                <Link
+                  href={taskPath(boardId, row.id)}
+                  className="font-medium text-foreground hover:underline"
+                >
+                  {row.title}
+                </Link>
                 {!isEmptyRichText(row.description) ? (
                   <RichTextContent
                     value={row.description}
