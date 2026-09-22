@@ -52,6 +52,21 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
         />
       </div>
 
+      <label
+        htmlFor="rememberMe"
+        className="flex cursor-pointer items-center gap-2.5 text-sm text-muted-foreground"
+      >
+        <input
+          id="rememberMe"
+          name="rememberMe"
+          type="checkbox"
+          value="on"
+          defaultChecked
+          className="size-4 accent-primary"
+        />
+        <span>Zapamiętaj mnie</span>
+      </label>
+
       <Button
         type="submit"
         disabled={pending}

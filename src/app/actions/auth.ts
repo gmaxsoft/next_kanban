@@ -3,9 +3,18 @@
 import { AuthError } from "next-auth";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { signIn, signOut, unstable_update } from "@/auth";
 import { requireAdmin, requireAuth } from "@/lib/auth-utils";
+import {
+  isAuthSessionCookieName,
+  isRememberMeChecked,
+  REMEMBER_ME_COOKIE,
+  SESSION_MAX_AGE_REMEMBERED,
+  sessionMaxAgeSeconds,
+} from "@/lib/auth-session";
 import {
   removeStoredAvatar,
   storeAvatarUpload,
@@ -26,6 +35,34 @@ export type AuthActionState = {
   success?: string;
 } | null;
 
+async function applySessionPersistence(rememberMe: boolean) {
+  const store = await cookies();
+  const maxAge = sessionMaxAgeSeconds(rememberMe);
+  const secure = process.env.NODE_ENV === "production";
+
+  store.set(REMEMBER_ME_COOKIE, rememberMe ? "1" : "0", {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure,
+    maxAge: SESSION_MAX_AGE_REMEMBERED,
+  });
+
+  for (const cookie of store.getAll()) {
+    if (!isAuthSessionCookieName(cookie.name)) {
+      continue;
+    }
+
+    store.set(cookie.name, cookie.value, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: cookie.name.startsWith("__Secure-") || secure,
+      maxAge,
+    });
+  }
+}
+
 export async function login(
   _prevState: AuthActionState,
   formData: FormData,
@@ -41,11 +78,14 @@ export async function login(
     return { error: firstZodError(parsed.error) };
   }
 
+  const rememberMe = isRememberMeChecked(formData.get("rememberMe"));
+  const callbackUrl = safeCallbackUrl(formData.get("callbackUrl"));
+
   try {
     await signIn("credentials", {
       email: parsed.data.email,
       password: parsed.data.password,
-      redirectTo: safeCallbackUrl(formData.get("callbackUrl")),
+      redirect: false,
     });
   } catch (error) {
     if (error instanceof AuthError) {
@@ -55,7 +95,8 @@ export async function login(
     throw error;
   }
 
-  return null;
+  await applySessionPersistence(rememberMe);
+  redirect(callbackUrl);
 }
 
 export async function logout() {

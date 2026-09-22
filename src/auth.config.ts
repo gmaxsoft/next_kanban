@@ -9,6 +9,11 @@ export const authConfig = {
   },
   session: {
     strategy: "jwt",
+    // Absolute JWT lifetime; login may shorten the cookie via "Zapamiętaj mnie".
+    maxAge: 60 * 60 * 24 * 30,
+  },
+  jwt: {
+    maxAge: 60 * 60 * 24 * 30,
   },
   providers: [],
   callbacks: {
