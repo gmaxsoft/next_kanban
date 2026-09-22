@@ -35,9 +35,9 @@ export function TicketStatusForm({
           defaultValue={status}
           className="h-8 min-w-44 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
         >
-          <option value="OPEN">Open</option>
-          <option value="IN_PROGRESS">In Progress</option>
-          <option value="RESOLVED">Resolved</option>
+          <option value="OPEN">Otwarte</option>
+          <option value="IN_PROGRESS">W trakcie</option>
+          <option value="RESOLVED">Rozwiązane</option>
         </select>
       </div>
       <Button type="submit" variant="secondary" disabled={pending}>

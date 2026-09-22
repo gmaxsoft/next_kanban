@@ -83,9 +83,9 @@ export default async function TicketsPage({ searchParams }: TicketsPageProps) {
             value: filters.status,
             emptyLabel: "Wszystkie statusy",
             options: [
-              { value: "OPEN", label: "Open" },
-              { value: "IN_PROGRESS", label: "In Progress" },
-              { value: "RESOLVED", label: "Resolved" },
+              { value: "OPEN", label: "Otwarte" },
+              { value: "IN_PROGRESS", label: "W trakcie" },
+              { value: "RESOLVED", label: "Rozwiązane" },
             ],
           },
           {

@@ -3,9 +3,9 @@ import type { TicketStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 
 const labels: Record<TicketStatus, string> = {
-  OPEN: "Open",
-  IN_PROGRESS: "In Progress",
-  RESOLVED: "Resolved",
+  OPEN: "Otwarte",
+  IN_PROGRESS: "W trakcie",
+  RESOLVED: "Rozwiązane",
 };
 
 const variants: Record<
