@@ -33,9 +33,21 @@ Główne ścieżki:
 - `/users` — lista zespołu (edycja: ADMINISTRATOR wszystkich, Pracownik tylko siebie)
 - `/profile` — profil, zespół, zmiana hasła
 
-Webhook (publiczny, chroniony sekretem):
+Webhook / cron (publiczne, chronione sekretem — nie sesją Auth.js):
 
 - `POST /api/webhooks/inbound-email` — przyjmowanie maili → Ticket / TicketMessage
+- `GET|POST /api/cron/check-imap` — poll skrzynek IMAP zespołów (`Authorization: Bearer CRON_SECRET`)
+
+### Tickety: webhook vs IMAP — gdzie login i hasło?
+
+| Tryb | Login / hasło skrzynki | Co ustawić |
+| --- | --- | --- |
+| **Webhook** (Resend itd.) | **Nie** w Kanbanie | Sekret w `.env` + URL u dostawcy |
+| **IMAP** | **Tak** — w panelu aplikacji | Ustawienia → Zespoły → tryb IMAP |
+
+Przy **IMAP** podajesz host, port, TLS, użytkownika, hasło i folder (`INBOX`) przy edycji zespołu. Hasło trafia do bazy (`Team.imapPassword`); przy kolejnej edycji puste pole zostawia dotychczasowe hasło.
+
+W `.env` dla IMAP jest tylko `CRON_SECRET` — to klucz Bearer do wywołania crona, **nie** hasło poczty. Cron woła `/api/cron/check-imap`, aplikacja loguje się danymi IMAP każdego zespołu, czyta maile **UNSEEN**, tworzy tickety i oznacza je jako przeczytane.
 
 > Pełna instrukcja ticketów: **[docs/TICKETS.md](./docs/TICKETS.md)**
 
@@ -79,6 +91,11 @@ EMAIL_FROM="Next Kanban <onboarding@resend.dev>"
 # Tickety (inbound webhook) — szczegóły w docs/TICKETS.md
 RESEND_WEBHOOK_SECRET=""
 INBOUND_EMAIL_WEBHOOK_SECRET=""
+
+# Cron IMAP — Bearer dla /api/cron/check-imap (nie hasło skrzynki!)
+# Wygeneruj: openssl rand -base64 32
+# Login/hasło IMAP: Ustawienia → Zespoły → tryb IMAP
+CRON_SECRET=""
 
 SOCKET_PORT="3001"
 NEXT_PUBLIC_SOCKET_URL="http://localhost:3001"
@@ -143,7 +160,7 @@ npm run start:all
 
 `npm start` uruchamia sam Next.js. Czat wymaga osobnego procesu (`start:all` albo `tsx server/socket.ts`).
 
-Dla ticketów ustaw publiczny URL webhooka u Resend (lub innego providera) oraz sekrety z `.env.example`. Zobacz [docs/TICKETS.md](./docs/TICKETS.md).
+Dla ticketów: webhook Resend **albo** IMAP (dane skrzynki w zespole + cron z `CRON_SECRET`). Szczegóły: [docs/TICKETS.md](./docs/TICKETS.md).
 
 ## Przydatne skrypty
 
@@ -162,7 +179,7 @@ Dla ticketów ustaw publiczny URL webhooka u Resend (lub innego providera) oraz 
 - **Kanban** — widok tablicy i listy; przeciąganie zadań między kolumnami; filtry i paginacja list.
 - **Szczegóły zadania** — dedykowana strona z opisem TipTap, assignee, terminem i komentarzami; `@imię` w komentarzu wysyła e-mail i tworzy powiadomienie w aplikacji.
 - **Powiadomienia** — dzwonek w nagłówku (nieprzeczytane, oznaczanie jako przeczytane); także e-mail przy przypisaniu i komentarzu (Resend, wysyłka w tle).
-- **Tickety** — webhook lub IMAP → zgłoszenia `[T-n]`; wspólna `processIncomingEmail`; odpowiedź z panelu; karta Kanban. Instrukcja: [docs/TICKETS.md](./docs/TICKETS.md).
+- **Tickety** — webhook (sekrety w `.env`) lub IMAP (login/hasło skrzynki w **Ustawienia → Zespoły** + `CRON_SECRET` w `.env`) → zgłoszenia `[T-n]`; odpowiedź z panelu; karta Kanban. Instrukcja: [docs/TICKETS.md](./docs/TICKETS.md).
 - **Wyszukiwanie** — pole w nagłówku szuka tablic i zadań (wyniki zależne od roli).
 - **Pulpit** — ADMIN widzi statystyki całego systemu; Pracownik — własne zadania i skróty zespołu.
 - **Czat** — historia w MySQL, WebSocket, status Online/Offline.

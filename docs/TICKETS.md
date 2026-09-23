@@ -49,6 +49,40 @@ CRON_SECRET="silny-losowy-cron-sekret"
 AUTH_URL="https://kanban.twoja-domena.pl"
 ```
 
+### Generowanie `CRON_SECRET`
+
+To losowy sekret Bearer chroniący `/api/cron/check-imap` (ten sam styl co `AUTH_SECRET`). Wygeneruj i wklej do `.env`:
+
+```bash
+openssl rand -base64 32
+```
+
+Na Windows (PowerShell), jeśli nie masz OpenSSL:
+
+```powershell
+$bytes = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+[Convert]::ToBase64String($bytes)
+```
+
+albo (Node.js):
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Przykład po wygenerowaniu:
+
+```env
+CRON_SECRET="k8fQ2...wynik-komendy..."
+```
+
+Cron / `curl` musi wysłać dokładnie tę wartość:
+
+```bash
+Authorization: Bearer k8fQ2...wynik-komendy...
+```
+
 **Bezpieczeństwo:** w produkcji ustaw sekrety. Webhook i cron są poza sesją Auth.js — chroni je wyłącznie Bearer / podpis Svix.
 
 ---
@@ -85,7 +119,7 @@ Następnie wywołują `processIncomingEmail(...)`, która:
 ## Konfiguracja IMAP + cron
 
 1. W zespole ustaw `inboundType = IMAP` i dane dostępowe.
-2. Ustaw `CRON_SECRET` w `.env`.
+2. Ustaw `CRON_SECRET` w `.env` (sekcja [Generowanie `CRON_SECRET`](#generowanie-cron_secret) powyżej).
 3. Wywołuj okresowo (co 1–5 minut):
 
 ```bash
