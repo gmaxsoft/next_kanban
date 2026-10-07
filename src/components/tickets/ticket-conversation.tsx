@@ -1,5 +1,6 @@
 import type { TicketMessageKind } from "@prisma/client";
 
+import { MentionBody } from "@/components/mentions/mention-body";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { getInitials } from "@/lib/user";
@@ -100,9 +101,11 @@ export function TicketConversation({
                 className="prose-editor max-w-none text-sm leading-6"
                 dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
               />
+            ) : message.bodyText ? (
+              <MentionBody content={message.bodyText} />
             ) : (
               <p className="whitespace-pre-wrap text-sm leading-6">
-                {message.bodyText || "(brak treści)"}
+                (brak treści)
               </p>
             )}
           </li>

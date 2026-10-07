@@ -139,6 +139,36 @@ export function notifyTaskCommented(input: {
   });
 }
 
+export function notifyTicketMentioned(input: {
+  toEmail: string;
+  recipientName: string;
+  actorName: string;
+  displayId: string;
+  subject: string;
+  comment: string;
+  ticketId: string;
+  context: "reply" | "note";
+}) {
+  scheduleMail(async () => {
+    await sendReactEmail({
+      to: input.toEmail,
+      subject: `Wspomniano Cię w tickecie ${input.displayId}`,
+      react: TaskCommentedEmail({
+        assigneeName: input.recipientName,
+        actorName: input.actorName,
+        taskTitle: `${input.displayId}: ${input.subject}`,
+        boardTitle:
+          input.context === "note"
+            ? "Notatka wewnętrzna"
+            : "Odpowiedź w tickecie",
+        commentExcerpt: excerpt(input.comment),
+        taskUrl: ticketUrl(input.ticketId),
+        mentioned: true,
+      }),
+    });
+  });
+}
+
 export async function sendTicketReplyEmail(input: {
   toEmail: string;
   requesterName: string | null;

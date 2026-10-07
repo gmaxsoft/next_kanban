@@ -235,8 +235,8 @@ Statusy: `Otwarte` · `W trakcie` · `Rozwiązane`. Odpowiedź e-mail lub nowe i
 | Zmień status | Otwarte / W trakcie / Rozwiązane |
 | Zapisz zespół | Ręczny wybór zespołu (nadpisuje auto-mapowanie) |
 | Utwórz zadanie na tablicy Kanban | Karta w kolumnie „Do zrobienia” / „To Do” / pierwszej kolumnie; tytuł `[T-101] …`; link ticket ↔ task |
-| Wyślij e-mail | Odpowiedź do nadawcy; temat `Re: [T-101] …`; wymaga `RESEND_API_KEY` |
-| Notatka wewnętrzna | Tylko w panelu, bez maila |
+| Wyślij e-mail | Odpowiedź do nadawcy; temat `Re: [T-101] …`; wymaga `RESEND_API_KEY`; `@imię` powiadamia osobę z zespołu |
+| Notatka wewnętrzna | Tylko w panelu, bez maila do klienta; `@imię` powiadamia osobę z zespołu |
 
 ---
 

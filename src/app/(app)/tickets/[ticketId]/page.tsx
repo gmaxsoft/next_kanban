@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/auth-utils";
 import { taskPath } from "@/lib/board-query";
-import { listAssignBoards } from "@/lib/boards";
+import { listAssignBoards, listBoardMembers } from "@/lib/boards";
 import { prisma } from "@/lib/prisma";
 import { sanitizeRichText } from "@/lib/rich-text";
 import { formatTicketId, getTicketDetails } from "@/lib/tickets";
@@ -52,12 +52,13 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
     notFound();
   }
 
-  const [teams, boards] = await Promise.all([
+  const [teams, boards, members] = await Promise.all([
     prisma.team.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true, inboundEmail: true },
     }),
     listAssignBoards(),
+    listBoardMembers(ticket.teamId ?? undefined),
   ]);
 
   const displayId = formatTicketId(ticket.number);
@@ -154,7 +155,7 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
         </CardContent>
       </Card>
 
-      <TicketReplyForm ticketId={ticket.id} />
+      <TicketReplyForm ticketId={ticket.id} members={members} />
     </div>
   );
 }

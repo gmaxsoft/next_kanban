@@ -179,7 +179,7 @@ Dla ticketów: webhook Resend **albo** IMAP (dane skrzynki w zespole + cron z `C
 - **Kanban** — widok tablicy i listy; przeciąganie zadań między kolumnami; filtry i paginacja list.
 - **Szczegóły zadania** — dedykowana strona z opisem TipTap, assignee, terminem i komentarzami; `@imię` w komentarzu wysyła e-mail i tworzy powiadomienie w aplikacji.
 - **Powiadomienia** — dzwonek w nagłówku (nieprzeczytane, oznaczanie jako przeczytane); także e-mail przy przypisaniu i komentarzu (Resend, wysyłka w tle).
-- **Tickety** — webhook (sekrety w `.env`) lub IMAP (login/hasło skrzynki w **Ustawienia → Zespoły** + `CRON_SECRET` w `.env`) → zgłoszenia `[T-n]`; odpowiedź z panelu; karta Kanban. Instrukcja: [docs/TICKETS.md](./docs/TICKETS.md).
+- **Tickety** — webhook (sekrety w `.env`) lub IMAP (login/hasło skrzynki w **Ustawienia → Zespoły** + `CRON_SECRET` w `.env`) → zgłoszenia `[T-n]`; odpowiedź / notatka z `@imię` (powiadomienie); karta Kanban. Instrukcja: [docs/TICKETS.md](./docs/TICKETS.md).
 - **Wyszukiwanie** — pole w nagłówku szuka tablic i zadań (wyniki zależne od roli).
 - **Pulpit** — ADMIN widzi statystyki całego systemu; Pracownik — własne zadania i skróty zespołu.
 - **Czat** — historia w MySQL, WebSocket, status Online/Offline.

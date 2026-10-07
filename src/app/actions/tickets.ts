@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { requireAdmin } from "@/lib/auth-utils";
-import { sendTicketReplyEmail } from "@/lib/mail";
+import { notifyTicketMentioned, sendTicketReplyEmail } from "@/lib/mail";
+import { extractMentionedUserIds } from "@/lib/mentions";
+import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { normalizeRichTextInput } from "@/lib/rich-text";
 import {
@@ -80,6 +82,63 @@ export async function updateTicketTeam(
   return { success: "Przypisano zespół." };
 }
 
+async function notifyTicketMentions(input: {
+  ticketId: string;
+  teamId: string | null;
+  displayId: string;
+  subject: string;
+  body: string;
+  actorId: string;
+  actorName: string;
+  explicitMentionIds: string[];
+  context: "reply" | "note";
+}) {
+  const mentionCandidates = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      ...(input.teamId ? { teamId: input.teamId } : {}),
+    },
+    select: { id: true, name: true, email: true },
+    orderBy: { name: "asc" },
+  });
+
+  const mentionedIds = extractMentionedUserIds(
+    input.body,
+    mentionCandidates,
+    input.explicitMentionIds,
+  ).filter((id) => id !== input.actorId);
+
+  if (mentionedIds.length === 0) {
+    return;
+  }
+
+  const preview = input.body.slice(0, 120);
+  const href = `/tickets/${input.ticketId}`;
+
+  await createNotifications(mentionedIds, {
+    title: "Wspomniano Cię w tickecie",
+    body: `${input.actorName} (${input.displayId}): ${preview}`,
+    href,
+  });
+
+  for (const member of mentionCandidates) {
+    if (!mentionedIds.includes(member.id)) {
+      continue;
+    }
+
+    notifyTicketMentioned({
+      toEmail: member.email,
+      recipientName: member.name,
+      actorName: input.actorName,
+      displayId: input.displayId,
+      subject: input.subject,
+      comment: input.body,
+      ticketId: input.ticketId,
+      context: input.context,
+    });
+  }
+}
+
 export async function addTicketInternalNote(
   _prev: TicketActionState,
   formData: FormData,
@@ -87,6 +146,10 @@ export async function addTicketInternalNote(
   const session = await requireAdmin();
   const ticketId = String(formData.get("ticketId") ?? "");
   const body = String(formData.get("body") ?? "").trim();
+  const explicitMentionIds = formData
+    .getAll("mentionedIds")
+    .map((value) => String(value))
+    .filter(Boolean);
 
   if (!ticketId || body.length < 1) {
     return { error: "Wpisz treść notatki." };
@@ -94,7 +157,7 @@ export async function addTicketInternalNote(
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
-    select: { id: true },
+    select: { id: true, number: true, subject: true, teamId: true },
   });
 
   if (!ticket) {
@@ -116,6 +179,20 @@ export async function addTicketInternalNote(
     data: { lastMessageAt: new Date() },
   });
 
+  const actorName = session.user.name ?? session.user.email ?? "Administrator";
+  await notifyTicketMentions({
+    ticketId: ticket.id,
+    teamId: ticket.teamId,
+    displayId: formatTicketId(ticket.number),
+    subject: ticket.subject,
+    body,
+    actorId: session.user.id,
+    actorName,
+    explicitMentionIds,
+    context: "note",
+  });
+
+  revalidatePath("/", "layout");
   revalidatePath(`/tickets/${ticketId}`);
   return { success: "Dodano notatkę wewnętrzną." };
 }
@@ -127,6 +204,10 @@ export async function replyToTicket(
   const session = await requireAdmin();
   const ticketId = String(formData.get("ticketId") ?? "");
   const body = String(formData.get("body") ?? "").trim();
+  const explicitMentionIds = formData
+    .getAll("mentionedIds")
+    .map((value) => String(value))
+    .filter(Boolean);
 
   if (!ticketId || body.length < 1) {
     return { error: "Wpisz treść odpowiedzi." };
@@ -142,13 +223,15 @@ export async function replyToTicket(
   }
 
   const subject = ticketSubjectWithRef(ticket.number, ticket.subject);
+  const displayId = formatTicketId(ticket.number);
+  const actorName = session.user.name ?? "Support";
 
   await prisma.ticketMessage.create({
     data: {
       ticketId,
       kind: "OUTBOUND",
       fromEmail: ticket.team?.inboundEmail ?? null,
-      fromName: session.user.name ?? "Support",
+      fromName: actorName,
       subject,
       bodyText: body.slice(0, 10000),
       authorId: session.user.id,
@@ -166,14 +249,27 @@ export async function replyToTicket(
   await sendTicketReplyEmail({
     toEmail: ticket.requesterEmail,
     requesterName: ticket.requesterName,
-    agentName: session.user.name ?? "Support",
+    agentName: actorName,
     ticketId: ticket.id,
-    displayId: formatTicketId(ticket.number),
+    displayId,
     subject,
     body,
     replyTo: ticket.team?.inboundEmail,
   });
 
+  await notifyTicketMentions({
+    ticketId: ticket.id,
+    teamId: ticket.teamId,
+    displayId,
+    subject: ticket.subject,
+    body,
+    actorId: session.user.id,
+    actorName,
+    explicitMentionIds,
+    context: "reply",
+  });
+
+  revalidatePath("/", "layout");
   revalidatePath("/tickets");
   revalidatePath(`/tickets/${ticketId}`);
   return { success: "Wysłano odpowiedź e-mail." };
