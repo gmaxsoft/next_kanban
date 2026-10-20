@@ -22,6 +22,7 @@ import { moveTask } from "@/app/actions/boards";
 import { AddTaskForm } from "@/components/kanban/add-task-form";
 import { KanbanColumn } from "@/components/kanban/board-column";
 import { TaskCard } from "@/components/kanban/task-card";
+import { TaskContextMenu } from "@/components/kanban/task-context-menu";
 import type { BoardView } from "@/lib/board-query";
 import { taskPath } from "@/lib/board-query";
 import type { BoardColumn, BoardTask } from "@/lib/kanban";
@@ -156,6 +157,7 @@ export function KanbanBoard({
   assignee,
   view,
   canCreateTasks,
+  canDeleteTasks = false,
 }: {
   boardId: string;
   columns: BoardColumn[];
@@ -163,6 +165,7 @@ export function KanbanBoard({
   assignee: string;
   view: BoardView;
   canCreateTasks: boolean;
+  canDeleteTasks?: boolean;
 }) {
   const router = useRouter();
   const [columns, setColumns] = useState(initialColumns);
@@ -302,15 +305,25 @@ export function KanbanBoard({
               </header>
               <div className="flex min-h-28 flex-1 flex-col gap-2 overflow-y-auto">
                 {column.tasks.map((task) => (
-                  <button
+                  <TaskContextMenu
                     key={task.id}
-                    type="button"
-                    className="cursor-pointer text-left"
-                    aria-label={`Otwórz zadanie ${task.title}`}
-                    onClick={() => openTask(task.id)}
+                    boardId={boardId}
+                    taskId={task.id}
+                    taskTitle={task.title}
+                    canDelete={canDeleteTasks}
                   >
-                    <TaskCard task={task} />
-                  </button>
+                    {({ onContextMenu }) => (
+                      <button
+                        type="button"
+                        className="cursor-pointer text-left"
+                        aria-label={`Otwórz zadanie ${task.title}`}
+                        onClick={() => openTask(task.id)}
+                        onContextMenu={onContextMenu}
+                      >
+                        <TaskCard task={task} />
+                      </button>
+                    )}
+                  </TaskContextMenu>
                 ))}
               </div>
               {canCreateTasks ? (
@@ -341,6 +354,7 @@ export function KanbanBoard({
               column={column}
               boardId={boardId}
               canCreateTasks={canCreateTasks}
+              canDeleteTasks={canDeleteTasks}
               onOpenTask={openTask}
             />
           ))}

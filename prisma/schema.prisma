@@ -97,6 +97,7 @@ model User {
   notifications        Notification[]
   ticketMessages       TicketMessage[]
   taskAttachments      TaskAttachment[] @relation("TaskAttachmentUploader")
+  taskArchives         TaskArchive[]    @relation("TaskArchiveAuthor")
 
   @@index([roleId])
   @@index([teamId])
@@ -165,6 +166,7 @@ model Board {
   createdBy   User     @relation("BoardCreator", fields: [createdById], references: [id], onDelete: Cascade)
   team        Team     @relation(fields: [teamId], references: [id], onDelete: Restrict)
   columns     Column[]
+  archives    TaskArchive[]
 
   @@index([createdById])
   @@index([teamId])
@@ -203,6 +205,7 @@ model Task {
   comments    Comment[]
   attachments TaskAttachment[]
   ticket      Ticket?
+  archive     TaskArchive?
 
   @@index([columnId])
   @@index([createdById])
@@ -210,6 +213,25 @@ model Task {
   @@index([listOrder])
   @@index([priority])
   @@index([dueDate])
+}
+
+/// Archived tasks (board Archive tab). Table name: Archiwum.
+model TaskArchive {
+  id            String   @id @default(uuid()) @db.Char(36)
+  taskId        String   @unique @db.Char(36)
+  boardId       String   @db.Char(36)
+  columnId      String   @db.Char(36)
+  columnTitle   String   @db.VarChar(160)
+  archivedAt    DateTime @default(now())
+  archivedById  String   @db.Char(36)
+
+  task       Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  board      Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  archivedBy User   @relation("TaskArchiveAuthor", fields: [archivedById], references: [id], onDelete: Restrict)
+
+  @@index([boardId, archivedAt])
+  @@index([archivedById])
+  @@map("Archiwum")
 }
 
 model TaskAttachment {

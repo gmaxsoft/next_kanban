@@ -5,14 +5,19 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
 import { TaskCard } from "@/components/kanban/task-card";
+import { TaskContextMenu } from "@/components/kanban/task-context-menu";
 import type { BoardTask } from "@/lib/kanban";
 import { cn } from "@/lib/utils";
 
 export function SortableTaskCard({
+  boardId,
   task,
+  canDelete,
   onOpen,
 }: {
+  boardId: string;
   task: BoardTask;
+  canDelete: boolean;
   onOpen: (taskId: string) => void;
 }) {
   const {
@@ -32,37 +37,47 @@ export function SortableTaskCard({
   }, [isDragging]);
 
   return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }}
-      className={cn(
-        "cursor-grab touch-none",
-        isDragging && "z-10 cursor-grabbing opacity-60",
-      )}
-      {...attributes}
-      {...listeners}
-      role="button"
-      tabIndex={0}
-      aria-label={`Otwórz zadanie ${task.title}`}
-      onClick={() => {
-        if (suppressClickRef.current) {
-          suppressClickRef.current = false;
-          return;
-        }
-
-        onOpen(task.id);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen(task.id);
-        }
-      }}
+    <TaskContextMenu
+      boardId={boardId}
+      taskId={task.id}
+      taskTitle={task.title}
+      canDelete={canDelete}
     >
-      <TaskCard task={task} />
-    </div>
+      {({ onContextMenu }) => (
+        <div
+          ref={setNodeRef}
+          style={{
+            transform: CSS.Transform.toString(transform),
+            transition,
+          }}
+          className={cn(
+            "cursor-grab touch-none",
+            isDragging && "z-10 cursor-grabbing opacity-60",
+          )}
+          {...attributes}
+          {...listeners}
+          role="button"
+          tabIndex={0}
+          aria-label={`Otwórz zadanie ${task.title}`}
+          onContextMenu={onContextMenu}
+          onClick={() => {
+            if (suppressClickRef.current) {
+              suppressClickRef.current = false;
+              return;
+            }
+
+            onOpen(task.id);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onOpen(task.id);
+            }
+          }}
+        >
+          <TaskCard task={task} />
+        </div>
+      )}
+    </TaskContextMenu>
   );
 }

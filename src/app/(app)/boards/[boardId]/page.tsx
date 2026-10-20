@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
+import { BoardArchiveView } from "@/components/kanban/board-archive-view";
 import { BoardFilters } from "@/components/kanban/board-filters";
 import { BoardViewTabs } from "@/components/kanban/board-view-tabs";
 import { KanbanBoard } from "@/components/kanban/kanban-board";
@@ -12,6 +13,7 @@ import { requireAuth } from "@/lib/auth-utils";
 import { parseBoardSearch, taskPath } from "@/lib/board-query";
 import {
   getBoardWithColumns,
+  listArchivedBoardTasks,
   listBoardMembers,
   mapBoardColumns,
 } from "@/lib/boards";
@@ -46,6 +48,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
   const { boardId } = await params;
   const { q, assignee, taskId, view } = parseBoardSearch(await searchParams);
   const canCreateTasks = session.user.isAdmin;
+  const canDeleteTasks = session.user.isAdmin;
 
   if (taskId) {
     redirect(taskPath(boardId, taskId));
@@ -59,6 +62,11 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
 
   const members = await listBoardMembers(board.teamId);
   const columns = mapBoardColumns(board);
+  const archivedTasks =
+    view === "archive"
+      ? await listArchivedBoardTasks(board.id, { q, assignee })
+      : [];
+
   const boardKey = [
     view,
     q,
@@ -69,7 +77,16 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
     .join(",");
 
   const emptyFiltered =
-    (q || assignee) && columns.every((column) => column.tasks.length === 0);
+    view !== "archive" &&
+    (q || assignee) &&
+    columns.every((column) => column.tasks.length === 0);
+
+  const viewHint =
+    view === "list"
+      ? "Widok listy — kliknij wiersz, aby otworzyć szczegóły. Prawy przycisk: archiwum / usuń."
+      : view === "archive"
+        ? "Archiwum — zadania ukryte z tablicy. Prawy przycisk: przywróć / usuń."
+        : "Widok tablicy — kliknij kartę, aby otworzyć szczegóły. Prawy przycisk: archiwum / usuń.";
 
   return (
     <div className="flex flex-1 flex-col gap-5 p-6">
@@ -86,10 +103,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           </Button>
           <h2 className="text-2xl font-semibold">{board.title}</h2>
           <p className="text-sm text-muted-foreground">
-            Zespół: {board.team.name}.{" "}
-            {view === "list"
-              ? "Widok listy — kliknij wiersz, aby otworzyć szczegóły zadania."
-              : "Widok tablicy — kliknij kartę, aby otworzyć stronę szczegółów."}
+            Zespół: {board.team.name}. {viewHint}
             {!canCreateTasks
               ? " Dodawanie zadań jest dostępne tylko dla ADMINISTRATORA."
               : null}
@@ -119,13 +133,20 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
         </p>
       ) : null}
 
-      {view === "list" ? (
+      {view === "archive" ? (
+        <BoardArchiveView
+          boardId={board.id}
+          tasks={archivedTasks}
+          canDelete={canDeleteTasks}
+        />
+      ) : view === "list" ? (
         <TaskListView
           boardId={board.id}
           columns={columns}
           q={q}
           assignee={assignee}
           view={view}
+          canDeleteTasks={canDeleteTasks}
         />
       ) : (
         <KanbanBoard
@@ -136,6 +157,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           assignee={assignee}
           view={view}
           canCreateTasks={canCreateTasks}
+          canDeleteTasks={canDeleteTasks}
         />
       )}
     </div>

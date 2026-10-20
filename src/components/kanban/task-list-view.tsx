@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { PriorityBadge } from "@/components/kanban/priority-badge";
+import { TaskContextMenu } from "@/components/kanban/task-context-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { RichTextContent } from "@/components/ui/rich-text-content";
@@ -38,15 +39,14 @@ type ListRow = {
 export function TaskListView({
   boardId,
   columns,
-  q,
-  assignee,
-  view,
+  canDeleteTasks = false,
 }: {
   boardId: string;
   columns: BoardColumn[];
   q: string;
   assignee: string;
   view: BoardView;
+  canDeleteTasks?: boolean;
 }) {
   const router = useRouter();
 
@@ -95,70 +95,80 @@ export function TaskListView({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr
+            <TaskContextMenu
               key={row.id}
-              className="cursor-pointer border-b last:border-0 hover:bg-muted/40"
-              onClick={() => openTask(row.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  openTask(row.id);
-                }
-              }}
-              tabIndex={0}
-              role="link"
+              boardId={boardId}
+              taskId={row.id}
+              taskTitle={row.title}
+              canDelete={canDeleteTasks}
             >
-              <td className="px-3 py-3 align-top">
-                <Link
-                  href={taskPath(boardId, row.id)}
-                  className="font-medium text-foreground hover:underline"
+              {({ onContextMenu }) => (
+                <tr
+                  className="cursor-pointer border-b last:border-0 hover:bg-muted/40"
+                  onClick={() => openTask(row.id)}
+                  onContextMenu={onContextMenu}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openTask(row.id);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
                 >
-                  {row.title}
-                </Link>
-                {!isEmptyRichText(row.description) ? (
-                  <RichTextContent
-                    value={row.description}
-                    excerpt
-                    excerptLength={90}
-                    className="mt-0.5 line-clamp-1 text-xs"
-                  />
-                ) : null}
-              </td>
-              <td className="px-3 py-3 align-top">
-                <Badge variant="secondary">{row.columnTitle}</Badge>
-              </td>
-              <td className="px-3 py-3 align-top">
-                {row.assignees.length === 0 ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {row.assignees.map((person) => (
-                      <span
-                        key={person.id}
-                        className="inline-flex items-center gap-1.5"
-                      >
-                        <Avatar size="sm" className="size-5">
-                          <AvatarImage
-                            src={person.avatarUrl ?? undefined}
-                            alt={person.name}
-                          />
-                          <AvatarFallback className="text-[9px]">
-                            {getInitials(person.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-xs">{person.name}</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </td>
-              <td className="px-3 py-3 align-top whitespace-nowrap">
-                {formatDueDate(row.dueDate)}
-              </td>
-              <td className="px-3 py-3 align-top">
-                <PriorityBadge priority={row.priority} />
-              </td>
-            </tr>
+                  <td className="px-3 py-3 align-top">
+                    <Link
+                      href={taskPath(boardId, row.id)}
+                      className="font-medium text-foreground hover:underline"
+                    >
+                      {row.title}
+                    </Link>
+                    {!isEmptyRichText(row.description) ? (
+                      <RichTextContent
+                        value={row.description}
+                        excerpt
+                        excerptLength={90}
+                        className="mt-0.5 line-clamp-1 text-xs"
+                      />
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    <Badge variant="secondary">{row.columnTitle}</Badge>
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {row.assignees.length === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {row.assignees.map((person) => (
+                          <span
+                            key={person.id}
+                            className="inline-flex items-center gap-1.5"
+                          >
+                            <Avatar size="sm" className="size-5">
+                              <AvatarImage
+                                src={person.avatarUrl ?? undefined}
+                                alt={person.name}
+                              />
+                              <AvatarFallback className="text-[9px]">
+                                {getInitials(person.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs">{person.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top whitespace-nowrap">
+                    {formatDueDate(row.dueDate)}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    <PriorityBadge priority={row.priority} />
+                  </td>
+                </tr>
+              )}
+            </TaskContextMenu>
           ))}
         </tbody>
       </table>

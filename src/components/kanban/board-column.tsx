@@ -12,11 +12,13 @@ export function KanbanColumn({
   column,
   boardId,
   canCreateTasks,
+  canDeleteTasks,
   onOpenTask,
 }: {
   column: BoardColumn;
   boardId: string;
   canCreateTasks: boolean;
+  canDeleteTasks: boolean;
   onOpenTask: (taskId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
@@ -44,7 +46,13 @@ export function KanbanColumn({
           strategy={verticalListSortingStrategy}
         >
           {column.tasks.map((task) => (
-            <SortableTaskCard key={task.id} task={task} onOpen={onOpenTask} />
+            <SortableTaskCard
+              key={task.id}
+              boardId={boardId}
+              task={task}
+              canDelete={canDeleteTasks}
+              onOpen={onOpenTask}
+            />
           ))}
         </SortableContext>
       </div>

@@ -28,8 +28,11 @@ const assigneeSelect = {
   select: { id: true, name: true, avatarUrl: true },
 } as const;
 
-function taskWhere(filters: BoardTaskFilters): Prisma.TaskWhereInput | undefined {
-  const where: Prisma.TaskWhereInput = {};
+function taskWhere(filters: BoardTaskFilters): Prisma.TaskWhereInput {
+  const where: Prisma.TaskWhereInput = {
+    // Hide archived tasks from active board/list views.
+    archive: null,
+  };
   const query = filters.q?.trim();
 
   if (query) {
@@ -42,7 +45,7 @@ function taskWhere(filters: BoardTaskFilters): Prisma.TaskWhereInput | undefined
     where.assignments = { some: { userId: filters.assignee } };
   }
 
-  return Object.keys(where).length > 0 ? where : undefined;
+  return where;
 }
 
 export async function listBoards(
@@ -68,7 +71,9 @@ export async function listBoards(
       team: { select: { id: true, name: true } },
       columns: {
         select: {
-          _count: { select: { tasks: true } },
+          _count: {
+            select: { tasks: { where: { archive: null } } },
+          },
         },
       },
     },
@@ -130,6 +135,7 @@ export async function listAssignedTasks(
 ): Promise<{ items: AssignedTaskRow[]; meta: PaginationMeta }> {
   const query = filters.q?.trim();
   const where = {
+    archive: null,
     ...(query ? { title: { contains: query } } : {}),
     ...(filters.priority ? { priority: filters.priority } : {}),
     column: {
@@ -320,5 +326,61 @@ export function mapBoardColumns(
       dueDate: task.dueDate?.toISOString() ?? null,
       assignees: task.assignments.map((assignment) => assignment.user),
     })),
+  }));
+}
+
+export type ArchivedBoardTask = {
+  id: string;
+  title: string;
+  priority: BoardColumn["tasks"][number]["priority"];
+  dueDate: string | null;
+  columnTitle: string;
+  archivedAt: string;
+  archivedByName: string;
+  assignees: BoardColumn["tasks"][number]["assignees"];
+};
+
+export async function listArchivedBoardTasks(
+  boardId: string,
+  filters: BoardTaskFilters = {},
+): Promise<ArchivedBoardTask[]> {
+  const query = filters.q?.trim();
+
+  const archives = await prisma.taskArchive.findMany({
+    where: {
+      boardId,
+      task: {
+        ...(query ? { title: { contains: query } } : {}),
+        ...(filters.assignee === "unassigned"
+          ? { assignments: { none: {} } }
+          : filters.assignee
+            ? { assignments: { some: { userId: filters.assignee } } }
+            : {}),
+      },
+    },
+    orderBy: { archivedAt: "desc" },
+    include: {
+      archivedBy: { select: { name: true } },
+      task: {
+        select: {
+          id: true,
+          title: true,
+          priority: true,
+          dueDate: true,
+          assignments: { include: { user: assigneeSelect } },
+        },
+      },
+    },
+  });
+
+  return archives.map((entry) => ({
+    id: entry.task.id,
+    title: entry.task.title,
+    priority: entry.task.priority,
+    dueDate: entry.task.dueDate?.toISOString() ?? null,
+    columnTitle: entry.columnTitle,
+    archivedAt: entry.archivedAt.toISOString(),
+    archivedByName: entry.archivedBy.name,
+    assignees: entry.task.assignments.map((assignment) => assignment.user),
   }));
 }

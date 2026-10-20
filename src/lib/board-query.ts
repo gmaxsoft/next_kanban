@@ -1,4 +1,4 @@
-export type BoardView = "board" | "list";
+export type BoardView = "board" | "list" | "archive";
 
 export type BoardSearchState = {
   q: string;
@@ -29,7 +29,8 @@ export function parseBoardSearch(searchParams: {
     assignee:
       assignee === "unassigned" || uuidPattern.test(assignee) ? assignee : "",
     taskId: uuidPattern.test(taskId) ? taskId : "",
-    view: view === "list" ? "list" : "board",
+    view:
+      view === "list" ? "list" : view === "archive" ? "archive" : "board",
   };
 }
 
@@ -52,8 +53,8 @@ export function boardPath(
     params.set("task", state.taskId);
   }
 
-  if (state.view === "list") {
-    params.set("view", "list");
+  if (state.view === "list" || state.view === "archive") {
+    params.set("view", state.view);
   }
 
   const query = params.toString();

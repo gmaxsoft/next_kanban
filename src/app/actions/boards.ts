@@ -221,7 +221,7 @@ export async function moveTask(input: {
 
   await prisma.$transaction(async (tx) => {
     const fromTasks = await tx.task.findMany({
-      where: { columnId: fromColumnId },
+      where: { columnId: fromColumnId, archive: null },
       orderBy: { order: "asc" },
       select: { id: true },
     });
@@ -230,7 +230,7 @@ export async function moveTask(input: {
       fromColumnId === toColumnId
         ? fromTasks
         : await tx.task.findMany({
-            where: { columnId: toColumnId },
+            where: { columnId: toColumnId, archive: null },
             orderBy: { order: "asc" },
             select: { id: true },
           });
@@ -274,4 +274,136 @@ export async function moveTask(input: {
 
   revalidatePath(`/boards/${boardId}`);
   return { success: true };
+}
+
+export async function archiveTask(
+  boardId: string,
+  taskId: string,
+): Promise<BoardActionState> {
+  const session = await requireAuth();
+
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, column: { boardId }, archive: null },
+    select: {
+      id: true,
+      title: true,
+      columnId: true,
+      column: { select: { title: true, boardId: true, board: { select: { teamId: true } } } },
+      archive: { select: { id: true } },
+    },
+  });
+
+  if (
+    !task ||
+    (!session.user.isAdmin && task.column.board.teamId !== session.user.teamId)
+  ) {
+    return { error: "Nie znaleziono zadania." };
+  }
+
+  await prisma.taskArchive.create({
+    data: {
+      taskId: task.id,
+      boardId: task.column.boardId,
+      columnId: task.columnId,
+      columnTitle: task.column.title,
+      archivedById: session.user.id,
+    },
+  });
+
+  await notifyTaskParticipants({
+    taskId,
+    actorId: session.user.id,
+    title: "Zadanie w archiwum",
+    body: `Zadanie „${task.title}” zostało przeniesione do archiwum.`,
+  });
+
+  revalidatePath(`/boards/${boardId}`);
+  revalidatePath("/tasks");
+  return { success: "Przeniesiono do archiwum." };
+}
+
+export async function restoreArchivedTask(
+  boardId: string,
+  taskId: string,
+): Promise<BoardActionState> {
+  const session = await requireAuth();
+
+  const archive = await prisma.taskArchive.findFirst({
+    where: { taskId, boardId },
+    select: {
+      id: true,
+      columnId: true,
+      task: {
+        select: {
+          id: true,
+          title: true,
+          column: { select: { board: { select: { teamId: true } } } },
+        },
+      },
+    },
+  });
+
+  if (
+    !archive ||
+    (!session.user.isAdmin &&
+      archive.task.column.board.teamId !== session.user.teamId)
+  ) {
+    return { error: "Nie znaleziono zadania w archiwum." };
+  }
+
+  const columnStillExists = await prisma.column.findFirst({
+    where: { id: archive.columnId, boardId },
+    select: { id: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    if (columnStillExists) {
+      const maxOrder = await tx.task.aggregate({
+        where: { columnId: archive.columnId, archive: null },
+        _max: { order: true },
+      });
+      await tx.task.update({
+        where: { id: taskId },
+        data: { columnId: archive.columnId, order: (maxOrder._max.order ?? -1) + 1 },
+      });
+    }
+    await tx.taskArchive.delete({ where: { id: archive.id } });
+  });
+
+  await notifyTaskParticipants({
+    taskId,
+    actorId: session.user.id,
+    title: "Przywrócono zadanie z archiwum",
+    body: `Zadanie „${archive.task.title}” wróciło na tablicę.`,
+  });
+
+  revalidatePath(`/boards/${boardId}`);
+  revalidatePath("/tasks");
+  return { success: "Przywrócono zadanie." };
+}
+
+export async function deleteTask(
+  boardId: string,
+  taskId: string,
+): Promise<BoardActionState> {
+  const session = await requireAuth();
+
+  if (!session.user.isAdmin) {
+    return { error: "Tylko ADMINISTRATOR może usuwać zadania." };
+  }
+
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, column: { boardId } },
+    select: { id: true, title: true },
+  });
+
+  if (!task) {
+    return { error: "Nie znaleziono zadania." };
+  }
+
+  await prisma.task.delete({ where: { id: task.id } });
+
+  revalidatePath(`/boards/${boardId}`);
+  revalidatePath("/tasks");
+  return { success: "Usunięto zadanie." };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Columns3, List } from "lucide-react";
+import { Archive, Columns3, List } from "lucide-react";
 
 import { boardPath, type BoardView } from "@/lib/board-query";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 const tabs: { view: BoardView; label: string; icon: typeof Columns3 }[] = [
   { view: "board", label: "Tablica", icon: Columns3 },
   { view: "list", label: "Lista", icon: List },
+  { view: "archive", label: "Archiwum", icon: Archive },
 ];
 
 export function BoardViewTabs({
