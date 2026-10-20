@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { Session } from "next-auth";
 
+import { useChatUnreadCount } from "@/components/chat/chat-socket-provider";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sidebar,
@@ -39,17 +40,39 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { title: "Pulpit", href: "/", icon: LayoutDashboard },
-  { title: "Zadania", href: "/tasks", icon: ListTodo, adminOnly: true },
-  { title: "Tickety", href: "/tickets", icon: Ticket, adminOnly: true },
+  { title: "Zadania", href: "/tasks", icon: ListTodo },
+  { title: "Tickety", href: "/tickets", icon: Ticket },
   { title: "Tablice", href: "/boards", icon: Columns3 },
   { title: "Czat", href: "/chat", icon: MessageCircle },
   { title: "Ustawienia", href: "/settings", icon: Settings },
   { title: "Użytkownicy", href: "/users", icon: Users },
 ];
 
-export function AppSidebar({ user }: { user: Session["user"] }) {
+function ChatUnreadBadge({ count }: { count: number }) {
+  if (count <= 0) {
+    return null;
+  }
+
+  return (
+    <span
+      data-slot="notification-badge"
+      className="flex size-4 shrink-0 items-center justify-center bg-destructive text-[10px] font-semibold leading-none text-white"
+    >
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
+export function AppSidebar({
+  user,
+  chatUnreadCount = 0,
+}: {
+  user: Session["user"];
+  chatUnreadCount?: number;
+}) {
   const pathname = usePathname();
   const isAdmin = user.isAdmin;
+  const liveUnread = useChatUnreadCount(chatUnreadCount);
 
   return (
     <Sidebar collapsible="icon">
@@ -87,16 +110,36 @@ export function AppSidebar({ user }: { user: Session["user"] }) {
                     item.href === "/"
                       ? pathname === "/"
                       : pathname.startsWith(item.href);
+                  const isChat = item.href === "/chat";
+                  const showChatBadge = isChat && liveUnread > 0;
 
                   return (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton
                         isActive={isActive}
-                        tooltip={item.title}
+                        tooltip={
+                          showChatBadge
+                            ? `Czat (${liveUnread > 9 ? "9+" : liveUnread})`
+                            : item.title
+                        }
                         render={<Link href={item.href} />}
                       >
-                        <item.icon />
-                        <span>{item.title}</span>
+                        <span className="relative">
+                          <item.icon />
+                          {showChatBadge ? (
+                            <span className="absolute -top-1.5 -right-1.5 hidden group-data-[collapsible=icon]:block">
+                              <ChatUnreadBadge count={liveUnread} />
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                          <span className="truncate">{item.title}</span>
+                          {showChatBadge ? (
+                            <span className="ml-auto group-data-[collapsible=icon]:hidden">
+                              <ChatUnreadBadge count={liveUnread} />
+                            </span>
+                          ) : null}
+                        </span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

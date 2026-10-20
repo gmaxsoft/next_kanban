@@ -8,6 +8,7 @@ import {
   listRecentChatMessages,
   listTeamsForChat,
 } from "@/lib/chat-data";
+import { markChatTeamRead } from "@/lib/chat-unread";
 import { DEFAULT_TEAM_ID } from "@/lib/rbac";
 
 export const metadata: Metadata = {
@@ -48,6 +49,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
   const [messages, members] = await Promise.all([
     listRecentChatMessages(preferred),
     listChatMembers(preferred),
+    markChatTeamRead(session.user.id, preferred),
   ]);
 
   return (

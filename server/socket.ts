@@ -39,13 +39,13 @@ async function main() {
   });
 
   const socketsByUser = new Map<string, Set<string>>();
-  const socketTeam = new Map<string, string>();
+  const socketTeams = new Map<string, Set<string>>();
 
-  function onlineUserIdsInTeam(teamId: string) {
+  function onlineUserIdsInRoom(teamId: string) {
     const ids = new Set<string>();
 
-    for (const [socketId, currentTeamId] of socketTeam) {
-      if (currentTeamId !== teamId) {
+    for (const [socketId, teams] of socketTeams) {
+      if (!teams.has(teamId)) {
         continue;
       }
 
@@ -57,14 +57,40 @@ async function main() {
       }
     }
 
-    return [...ids];
+    return ids;
   }
 
-  function emitPresence(teamId: string) {
+  async function emitPresence(teamId: string) {
+    const members = await prisma.user.findMany({
+      where: { isActive: true, teamId },
+      select: { id: true },
+    });
+
+    const online = new Set<string>(onlineUserIdsInRoom(teamId));
+
+    for (const member of members) {
+      if (socketsByUser.has(member.id)) {
+        online.add(member.id);
+      }
+    }
+
     io.to(chatTeamRoom(teamId)).emit(CHAT_EVENTS.presence, {
       teamId,
-      onlineUserIds: onlineUserIdsInTeam(teamId),
+      onlineUserIds: [...online],
     });
+  }
+
+  async function joinTeam(socketId: string, teamId: string) {
+    const socket = io.sockets.sockets.get(socketId);
+    if (!socket) {
+      return;
+    }
+
+    const teams = socketTeams.get(socketId) ?? new Set<string>();
+    teams.add(teamId);
+    socketTeams.set(socketId, teams);
+    await socket.join(chatTeamRoom(teamId));
+    await emitPresence(teamId);
   }
 
   io.use(async (socket, next) => {
@@ -84,37 +110,58 @@ async function main() {
     sockets.add(socket.id);
     socketsByUser.set(user.id, sockets);
 
+    void (async () => {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { teamId: true },
+      });
+
+      if (dbUser?.teamId) {
+        await joinTeam(socket.id, dbUser.teamId);
+      }
+    })();
+
     socket.on(CHAT_EVENTS.join, async (payload: unknown) => {
-      const teamId =
+      const teamIds: string[] = [];
+
+      if (
+        typeof payload === "object" &&
+        payload &&
+        "teamIds" in payload &&
+        Array.isArray((payload as { teamIds: unknown }).teamIds)
+      ) {
+        for (const value of (payload as { teamIds: unknown[] }).teamIds) {
+          if (typeof value === "string" && value) {
+            teamIds.push(value);
+          }
+        }
+      } else if (
         typeof payload === "object" &&
         payload &&
         "teamId" in payload &&
         typeof (payload as { teamId: unknown }).teamId === "string"
-          ? (payload as { teamId: string }).teamId
-          : "";
+      ) {
+        teamIds.push((payload as { teamId: string }).teamId);
+      }
 
-      const team = teamId
-        ? await prisma.team.findUnique({
-            where: { id: teamId },
-            select: { id: true },
-          })
-        : null;
-
-      if (!team) {
+      if (teamIds.length === 0) {
         socket.emit(CHAT_EVENTS.error, { error: "Nie znaleziono zespołu." });
         return;
       }
 
-      const previousTeamId = socketTeam.get(socket.id);
+      const teams = await prisma.team.findMany({
+        where: { id: { in: teamIds } },
+        select: { id: true },
+      });
 
-      if (previousTeamId) {
-        socket.leave(chatTeamRoom(previousTeamId));
-        emitPresence(previousTeamId);
+      if (teams.length === 0) {
+        socket.emit(CHAT_EVENTS.error, { error: "Nie znaleziono zespołu." });
+        return;
       }
 
-      socketTeam.set(socket.id, team.id);
-      await socket.join(chatTeamRoom(team.id));
-      emitPresence(team.id);
+      for (const team of teams) {
+        await joinTeam(socket.id, team.id);
+      }
     });
 
     socket.on(CHAT_EVENTS.send, async (payload: unknown) => {
@@ -175,8 +222,8 @@ async function main() {
     });
 
     socket.on("disconnect", () => {
-      const teamId = socketTeam.get(socket.id);
-      socketTeam.delete(socket.id);
+      const teams = socketTeams.get(socket.id);
+      socketTeams.delete(socket.id);
 
       const remaining = socketsByUser.get(user.id);
       remaining?.delete(socket.id);
@@ -185,8 +232,10 @@ async function main() {
         socketsByUser.delete(user.id);
       }
 
-      if (teamId) {
-        emitPresence(teamId);
+      if (teams) {
+        for (const teamId of teams) {
+          void emitPresence(teamId);
+        }
       }
     });
   });

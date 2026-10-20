@@ -1,0 +1,35 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { requireAuth } from "@/lib/auth-utils";
+import {
+  countUnreadChatMessages,
+  markChatTeamRead,
+} from "@/lib/chat-unread";
+import { prisma } from "@/lib/prisma";
+
+export async function markChatTeamAsRead(teamId: string) {
+  const session = await requireAuth();
+
+  if (!teamId) {
+    return { error: "Brak zespołu." as const };
+  }
+
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { id: true },
+  });
+
+  if (!team) {
+    return { error: "Nie znaleziono zespołu." as const };
+  }
+
+  await markChatTeamRead(session.user.id, team.id);
+  const unreadCount = await countUnreadChatMessages(session.user.id);
+
+  revalidatePath("/", "layout");
+  revalidatePath("/chat");
+
+  return { success: true as const, unreadCount };
+}

@@ -7,6 +7,7 @@ import { Paperclip, Send, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { ChatAttachments } from "@/components/chat/chat-attachments";
+import { ChatReadMarker } from "@/components/chat/chat-read-marker";
 import { EmojiPicker } from "@/components/chat/emoji-picker";
 import { PresenceList } from "@/components/chat/presence-list";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
@@ -257,6 +258,7 @@ export function ChatRoom({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden border bg-card shadow-sm lg:flex-row">
+      <ChatReadMarker teamId={teamId} messageCount={messages.length} />
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
           <div className="space-y-2">
