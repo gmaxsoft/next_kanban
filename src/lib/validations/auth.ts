@@ -107,6 +107,21 @@ export const teamSchema = z
     imapPassword: z.union([z.literal(""), z.string().max(255)]),
     imapSecure: z.enum(["true", "false"]).default("true"),
     imapMailbox: z.union([z.literal(""), z.string().trim().max(120)]),
+    imapAllowedSenderDomains: z
+      .string()
+      .max(2000, "Lista domen może mieć maksymalnie 2000 znaków")
+      .refine(
+        (value) =>
+          value
+            .split(/[\s,;]+/)
+            .filter(Boolean)
+            .every((domain) =>
+              /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(
+                domain,
+              ),
+            ),
+        "Podaj domeny, np. pwginfo.pl, oddzielone przecinkami lub nowymi liniami.",
+      ),
     keepImapPassword: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {

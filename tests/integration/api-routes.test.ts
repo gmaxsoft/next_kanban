@@ -109,7 +109,7 @@ describe("GET /api/cron/check-imap", () => {
   beforeEach(() => {
     pollAllImapInboxes.mockReset();
     process.env.CRON_SECRET = "test-cron-secret";
-    process.env.NODE_ENV = "test";
+    Reflect.set(process.env, "NODE_ENV", "test");
   });
 
   it("rejects requests without CRON_SECRET bearer", async () => {

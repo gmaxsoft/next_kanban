@@ -174,6 +174,9 @@ function parseTeamFormData(formData: FormData, options?: { keepImapPassword?: bo
     imapPassword: String(formData.get("imapPassword") ?? ""),
     imapSecure: String(formData.get("imapSecure") ?? "true") === "false" ? "false" : "true",
     imapMailbox: String(formData.get("imapMailbox") ?? "").trim() || "INBOX",
+    imapAllowedSenderDomains: String(
+      formData.get("imapAllowedSenderDomains") ?? "pwginfo.pl",
+    ).trim(),
     keepImapPassword: options?.keepImapPassword ?? false,
   });
 }
@@ -191,6 +194,11 @@ function teamInboundData(parsed: z.infer<typeof teamSchema>, existingPassword?: 
       : null,
     imapSecure: isImap ? parsed.imapSecure === "true" : true,
     imapMailbox: isImap ? parsed.imapMailbox || "INBOX" : null,
+    imapAllowedSenderDomains: parsed.imapAllowedSenderDomains
+      .split(/[\s,;]+/)
+      .filter(Boolean)
+      .map((domain) => domain.toLowerCase())
+      .join("\n"),
   };
 }
 

@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ListFilters } from "@/components/ui/list-filters";
+import { ListFilters, type ListFilterField } from "@/components/ui/list-filters";
 import { ListPagination } from "@/components/ui/list-pagination";
 import { requireAuth } from "@/lib/auth-utils";
 import { listBoards, listTeams } from "@/lib/boards";
@@ -36,18 +36,47 @@ type BoardsPageProps = {
 export default async function BoardsPage({ searchParams }: BoardsPageProps) {
   const session = await requireAuth();
   const isAdmin = session.user.isAdmin;
+  const teamScope = session.user.teamId ?? "00000000-0000-0000-0000-000000000000";
   const params = await searchParams;
   const filters = parseBoardsListSearch(params);
+  const effectiveFilters = isAdmin ? filters : { ...filters, team: teamScope };
   const pagination = parsePagination(params);
-  const [{ items: boards, meta }, teams] = await Promise.all([
-    listBoards(filters, pagination),
+  const [{ items: boards, meta }, allTeams] = await Promise.all([
+    listBoards(effectiveFilters, pagination),
     listTeams(),
   ]);
-  const hasActiveFilters = Boolean(filters.q || filters.team);
+  const teams = isAdmin
+    ? allTeams
+    : allTeams.filter((team) => team.id === session.user.teamId);
+  const hasActiveFilters = Boolean(filters.q || (isAdmin && filters.team));
   const listQuery = {
-    q: filters.q || undefined,
-    team: filters.team || undefined,
+    q: effectiveFilters.q || undefined,
+    team: effectiveFilters.team || undefined,
   };
+  const filterFields: ListFilterField[] = [
+    {
+      type: "search",
+      name: "q",
+      label: "Szukaj tablicy",
+      value: filters.q,
+      placeholder: "np. PWG, sprint...",
+    },
+    ...(isAdmin
+      ? [
+          {
+            type: "select" as const,
+            name: "team",
+            label: "Zespół",
+            value: filters.team,
+            emptyLabel: "Wszystkie zespoły",
+            options: teams.map((team) => ({
+              value: team.id,
+              label: team.name,
+            })),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -79,26 +108,7 @@ export default async function BoardsPage({ searchParams }: BoardsPageProps) {
         key={`${filters.q}|${filters.team}|${meta.pageSize}`}
         pathname="/boards"
         preserve={{ pageSize: meta.pageSize }}
-        fields={[
-          {
-            type: "search",
-            name: "q",
-            label: "Szukaj tablicy",
-            value: filters.q,
-            placeholder: "np. PWG, sprint...",
-          },
-          {
-            type: "select",
-            name: "team",
-            label: "Zespół",
-            value: filters.team,
-            emptyLabel: "Wszystkie zespoły",
-            options: teams.map((team) => ({
-              value: team.id,
-              label: team.name,
-            })),
-          },
-        ]}
+        fields={filterFields}
       />
 
       {boards.length === 0 ? (

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAuth } from "@/lib/auth-utils";
+import { notifyTaskParticipants } from "@/lib/task-notifications";
 import { prisma } from "@/lib/prisma";
 import { normalizeRichTextInput } from "@/lib/rich-text";
 import {
@@ -92,6 +93,7 @@ export async function createTask(
     boardId: String(formData.get("boardId") ?? ""),
     columnId: String(formData.get("columnId") ?? ""),
     title: String(formData.get("title") ?? ""),
+    requestedBy: String(formData.get("requestedBy") ?? "").trim(),
     description: description || undefined,
     priority: formData.get("priority") || "MEDIUM",
     assigneeIds,
@@ -136,9 +138,10 @@ export async function createTask(
     _max: { order: true },
   });
 
-  await prisma.task.create({
+  const task = await prisma.task.create({
     data: {
       title: parsed.data.title,
+      requestedBy: parsed.data.requestedBy || null,
       description: parsed.data.description,
       priority: parsed.data.priority,
       order: (aggregate._max.order ?? -1) + 1,
@@ -152,6 +155,14 @@ export async function createTask(
             }
           : undefined,
     },
+    select: { id: true },
+  });
+
+  await notifyTaskParticipants({
+    taskId: task.id,
+    actorId: session.user.id,
+    title: "Utworzono zadanie",
+    body: `Utworzono zadanie „${parsed.data.title}”.`,
   });
 
   revalidatePath("/");
@@ -168,7 +179,7 @@ export async function moveTask(input: {
   toColumnId: string;
   toIndex: number;
 }) {
-  await requireAuth();
+  const session = await requireAuth();
 
   const parsed = moveTaskSchema.safeParse(input);
 
@@ -181,7 +192,14 @@ export async function moveTask(input: {
   const [task, destColumn] = await Promise.all([
     prisma.task.findUnique({
       where: { id: taskId },
-      include: { column: { select: { boardId: true } } },
+      include: {
+        column: {
+          select: {
+            boardId: true,
+            board: { select: { teamId: true } },
+          },
+        },
+      },
     }),
     prisma.column.findUnique({
       where: { id: toColumnId },
@@ -193,7 +211,8 @@ export async function moveTask(input: {
     !task ||
     !destColumn ||
     task.column.boardId !== boardId ||
-    destColumn.boardId !== boardId
+    destColumn.boardId !== boardId ||
+    (!session.user.isAdmin && task.column.board.teamId !== session.user.teamId)
   ) {
     return { error: "Nie znaleziono zadania lub kolumny." };
   }
@@ -243,6 +262,15 @@ export async function moveTask(input: {
 
     await Promise.all(updates);
   });
+
+  if (fromColumnId !== toColumnId) {
+    await notifyTaskParticipants({
+      taskId,
+      actorId: session.user.id,
+      title: "Zmieniono status zadania",
+      body: `Zadanie „${task.title}” zostało przeniesione do innej kolumny.`,
+    });
+  }
 
   revalidatePath(`/boards/${boardId}`);
   return { success: true };

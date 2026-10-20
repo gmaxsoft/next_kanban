@@ -28,6 +28,7 @@ export const createTaskSchema = z.object({
     .trim()
     .min(1, "Tytuł zadania jest wymagany")
     .max(120, "Tytuł może mieć maksymalnie 120 znaków"),
+  requestedBy: z.string().trim().max(255).optional(),
   description: z.string().trim().max(20000).optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH"]).default("MEDIUM"),
   assigneeIds: z.array(z.string().uuid()).max(50).default([]),
@@ -70,11 +71,13 @@ export const updateTaskSchema = z.object({
     .trim()
     .min(1, "Tytuł zadania jest wymagany")
     .max(120, "Tytuł może mieć maksymalnie 120 znaków"),
+  requestedBy: z.string().trim().max(255).optional(),
   description: z
     .string()
     .max(20000, "Opis może mieć maksymalnie 20000 znaków"),
   priority: z.enum(["LOW", "MEDIUM", "HIGH"]),
   assigneeIds: z.array(z.string().uuid()).max(50).optional(),
+  watcherIds: z.array(z.string().uuid()).max(50).optional(),
   dueDate: z
     .union([z.iso.date("Nieprawidłowa data"), z.literal("")])
     .optional()

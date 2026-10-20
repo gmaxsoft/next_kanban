@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { after } from "next/server";
+import { createTransport } from "nodemailer";
 import { Resend } from "resend";
 
 import { TaskAssignedEmail } from "@/emails/task-assigned";
 import { TaskCommentedEmail } from "@/emails/task-commented";
-import { TicketReplyEmail } from "@/emails/ticket-reply";
 
 function appUrl() {
   return (process.env.AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -139,36 +139,6 @@ export function notifyTaskCommented(input: {
   });
 }
 
-export function notifyTicketMentioned(input: {
-  toEmail: string;
-  recipientName: string;
-  actorName: string;
-  displayId: string;
-  subject: string;
-  comment: string;
-  ticketId: string;
-  context: "reply" | "note";
-}) {
-  scheduleMail(async () => {
-    await sendReactEmail({
-      to: input.toEmail,
-      subject: `Wspomniano Cię w tickecie ${input.displayId}`,
-      react: TaskCommentedEmail({
-        assigneeName: input.recipientName,
-        actorName: input.actorName,
-        taskTitle: `${input.displayId}: ${input.subject}`,
-        boardTitle:
-          input.context === "note"
-            ? "Notatka wewnętrzna"
-            : "Odpowiedź w tickecie",
-        commentExcerpt: excerpt(input.comment),
-        taskUrl: ticketUrl(input.ticketId),
-        mentioned: true,
-      }),
-    });
-  });
-}
-
 export async function sendTicketReplyEmail(input: {
   toEmail: string;
   requesterName: string | null;
@@ -177,19 +147,115 @@ export async function sendTicketReplyEmail(input: {
   displayId: string;
   subject: string;
   body: string;
-  replyTo?: string | null;
+  inboundEmail: string;
+  smtpHost: string;
+  smtpUser: string;
+  smtpPassword: string;
 }) {
-  await sendReactEmail({
-    to: input.toEmail,
-    subject: input.subject,
-    replyTo: input.replyTo || undefined,
-    react: TicketReplyEmail({
-      requesterName: input.requesterName ?? "Kliencie",
-      agentName: input.agentName,
-      ticketId: input.displayId,
-      subject: input.subject,
-      body: input.body,
-      ticketUrl: ticketUrl(input.ticketId),
-    }),
+  const transporter = createTransport({
+    host: input.smtpHost,
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: { user: input.smtpUser, pass: input.smtpPassword },
   });
+
+  const escapedBody = input.body
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\r?\n/g, "<br>");
+
+  try {
+    await transporter.sendMail({
+      from: `Zespół IT <${input.inboundEmail}>`,
+      to: input.toEmail,
+      replyTo: input.inboundEmail,
+      subject: input.subject,
+      text: input.body,
+      html: `<p>${escapedBody}</p><hr><p>Odpowiedź do zgłoszenia ${input.displayId}: ${input.subject}</p>`,
+    });
+  } finally {
+    transporter.close();
+  }
+}
+
+export async function sendTicketAcknowledgementEmail(input: {
+  toEmail: string;
+  requesterName: string | null;
+  ticketId: string;
+  subject: string;
+  ticketUrl: string;
+  inboundEmail: string;
+  smtpHost: string;
+  smtpUser: string;
+  smtpPassword: string;
+}) {
+  const transporter = createTransport({
+    host: input.smtpHost,
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: {
+      user: input.smtpUser,
+      pass: input.smtpPassword,
+    },
+  });
+  const greeting = input.requesterName?.trim()
+    ? `Dzień dobry ${input.requesterName.trim()},`
+    : "Dzień dobry,";
+  const emailSubject = `[${input.ticketId}] Otrzymaliśmy zgłoszenie: ${input.subject}`;
+
+  try {
+    await transporter.sendMail({
+      from: `Next Kanban <${input.inboundEmail}>`,
+      to: input.toEmail,
+      replyTo: input.inboundEmail,
+      subject: emailSubject,
+      text: [
+        greeting,
+        "",
+        `Otrzymaliśmy Twoje zgłoszenie „${input.subject}”.`,
+        `Numer zgłoszenia: ${input.ticketId}.`,
+        "Nasz zespół IT zajmie się sprawą. Odpowiadając na tę wiadomość, pozostaw numer zgłoszenia w temacie.",
+        "",
+        `Podgląd zgłoszenia w Next Kanban: ${input.ticketUrl}`,
+        "",
+        "Pozdrawiamy,",
+        "Zespół IT",
+      ].join("\n"),
+    });
+  } finally {
+    transporter.close();
+  }
+}
+
+export async function sendTeamNotificationEmail(input: {
+  toEmail: string;
+  inboundEmail: string;
+  smtpHost: string;
+  smtpUser: string;
+  smtpPassword: string;
+  subject: string;
+  body: string;
+}) {
+  const transporter = createTransport({
+    host: input.smtpHost,
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: { user: input.smtpUser, pass: input.smtpPassword },
+  });
+
+  try {
+    await transporter.sendMail({
+      from: `Next Kanban <${input.inboundEmail}>`,
+      to: input.toEmail,
+      replyTo: input.inboundEmail,
+      subject: input.subject,
+      text: input.body,
+    });
+  } finally {
+    transporter.close();
+  }
 }

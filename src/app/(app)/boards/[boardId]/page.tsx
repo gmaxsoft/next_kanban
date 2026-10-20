@@ -29,11 +29,15 @@ type BoardPageProps = {
 export async function generateMetadata({
   params,
 }: BoardPageProps): Promise<Metadata> {
+  const session = await requireAuth();
   const { boardId } = await params;
   const board = await getBoardWithColumns(boardId);
 
   return {
-    title: board?.title ?? "Tablica",
+    title:
+      board && (session.user.isAdmin || board.teamId === session.user.teamId)
+        ? board.title
+        : "Tablica",
   };
 }
 
@@ -49,7 +53,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
 
   const board = await getBoardWithColumns(boardId, { q, assignee });
 
-  if (!board) {
+  if (!board || (!session.user.isAdmin && board.teamId !== session.user.teamId)) {
     notFound();
   }
 

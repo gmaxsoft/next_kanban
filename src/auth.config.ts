@@ -1,4 +1,10 @@
 import type { NextAuthConfig } from "next-auth";
+import { encode as encodeJwt } from "@auth/core/jwt";
+
+import {
+  SESSION_MAX_AGE_REMEMBERED,
+  sessionMaxAgeSeconds,
+} from "@/lib/auth-session";
 
 const publicRoutes = ["/login"];
 
@@ -14,6 +20,15 @@ export const authConfig = {
   },
   jwt: {
     maxAge: 60 * 60 * 24 * 30,
+    async encode({ token, secret, salt }) {
+      const now = Math.floor(Date.now() / 1000);
+      const maxAge =
+        typeof token?.sessionExpiresAt === "number"
+          ? Math.max(0, token.sessionExpiresAt - now)
+          : SESSION_MAX_AGE_REMEMBERED;
+
+      return encodeJwt({ token, secret, salt, maxAge });
+    },
   },
   providers: [],
   callbacks: {
@@ -49,18 +64,15 @@ export const authConfig = {
         return false;
       }
 
-      if (pathname.startsWith("/tasks") && !auth?.user.isAdmin) {
-        return Response.redirect(new URL("/", request.nextUrl));
-      }
-
-      if (pathname.startsWith("/tickets") && !auth?.user.isAdmin) {
-        return Response.redirect(new URL("/", request.nextUrl));
-      }
-
       return true;
     },
     jwt({ token, user, trigger, session }) {
       if (user) {
+        const rememberMe =
+          (user as typeof user & { rememberMe?: boolean }).rememberMe !== false;
+        token.rememberMe = rememberMe;
+        token.sessionExpiresAt =
+          Math.floor(Date.now() / 1000) + sessionMaxAgeSeconds(rememberMe);
         token.id = user.id!;
         token.isAdmin = user.isAdmin;
         token.roleId = user.roleId;
