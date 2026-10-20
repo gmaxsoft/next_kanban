@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 
 import {
@@ -9,6 +9,10 @@ import {
   updateTeam,
   type SettingsActionState,
 } from "@/app/actions/settings";
+import {
+  TeamsDataTable,
+  type TeamsTableRow,
+} from "@/components/settings/teams-data-table";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +37,7 @@ export type TeamRow = {
   imapUser: string | null;
   imapSecure: boolean;
   imapMailbox: string | null;
+  imapAllowedSenderDomains: string;
   hasImapPassword: boolean;
   userCount: number;
 };
@@ -151,6 +156,23 @@ function InboundFields({
                 placeholder="INBOX"
               />
             </div>
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor={`${idPrefix}-imap-domains`}>
+                Dozwolone domeny nadawców
+              </Label>
+              <textarea
+                id={`${idPrefix}-imap-domains`}
+                name="imapAllowedSenderDomains"
+                rows={3}
+                maxLength={2000}
+                defaultValue={defaults?.imapAllowedSenderDomains ?? "pwginfo.pl"}
+                placeholder="pwginfo.pl&#10;firma-partnerska.pl"
+                className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              />
+              <p className="text-xs text-muted-foreground">
+                Podaj domeny oddzielone przecinkami lub nowymi liniami.
+              </p>
+            </div>
           </div>
         </div>
       ) : (
@@ -161,6 +183,11 @@ function InboundFields({
           <input type="hidden" name="imapPassword" value="" />
           <input type="hidden" name="imapSecure" value="true" />
           <input type="hidden" name="imapMailbox" value="INBOX" />
+          <input
+            type="hidden"
+            name="imapAllowedSenderDomains"
+            value={defaults?.imapAllowedSenderDomains ?? "pwginfo.pl"}
+          />
         </>
       )}
     </div>
@@ -174,25 +201,46 @@ export function TeamsPanel({
   teams: TeamRow[];
   canManage: boolean;
 }) {
-  const [query, setQuery] = useState("");
   const [createState, createAction, createPending] = useActionState<
     SettingsActionState,
     FormData
   >(createTeam, null);
   useActionToast(createState);
 
-  const filteredTeams = teams.filter((team) => {
-    const q = query.trim().toLowerCase();
-    if (!q) {
-      return true;
-    }
-    return (
-      team.name.toLowerCase().includes(q) ||
-      (team.description ?? "").toLowerCase().includes(q) ||
-      (team.inboundEmail ?? "").toLowerCase().includes(q) ||
-      team.inboundType.toLowerCase().includes(q)
-    );
-  });
+  const rows: TeamsTableRow[] = useMemo(
+    () =>
+      teams.map((team) => {
+        const inboundTypeLabel =
+          team.inboundType === "IMAP" ? "IMAP" : "Webhook";
+        return {
+          ...team,
+          inboundTypeLabel,
+          searchText: [
+            team.name,
+            team.description ?? "",
+            team.inboundEmail ?? "",
+            inboundTypeLabel,
+          ]
+            .join(" ")
+            .toLowerCase(),
+        };
+      }),
+    [teams],
+  );
+
+  const renderActions = useCallback(
+    (team: TeamsTableRow) => (
+      <>
+        <EditTeamButton team={team} />
+        <DeleteTeamButton
+          teamId={team.id}
+          teamName={team.name}
+          disabled={team.userCount > 0}
+        />
+      </>
+    ),
+    [],
+  );
 
   return (
     <div className="grid gap-6">
@@ -231,73 +279,11 @@ export function TeamsPanel({
         </p>
       )}
 
-      <div className="grid gap-2">
-        <Label htmlFor="teams-filter">Filtruj zespoły</Label>
-        <Input
-          id="teams-filter"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Szukaj po nazwie, skrzynce lub trybie..."
-        />
-      </div>
-
-      <div className="overflow-x-auto border border-border">
-        <table className="w-full min-w-[40rem] text-left text-sm">
-          <thead className="border-b bg-muted/40 text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 font-medium">Nazwa</th>
-              <th className="px-3 py-2 font-medium">Skrzynka</th>
-              <th className="px-3 py-2 font-medium">Tryb</th>
-              <th className="px-3 py-2 font-medium">Członkowie</th>
-              {canManage ? (
-                <th className="px-3 py-2 font-medium">Akcje</th>
-              ) : null}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredTeams.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={canManage ? 5 : 4}
-                  className="px-3 py-4 text-sm text-muted-foreground"
-                >
-                  Brak zespołów pasujących do filtra.
-                </td>
-              </tr>
-            ) : (
-              filteredTeams.map((team) => (
-                <tr key={team.id} className="border-b last:border-0">
-                  <td className="px-3 py-2.5">
-                    <div className="font-medium">{team.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {team.description || "—"}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">
-                    {team.inboundEmail || "—"}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    {team.inboundType === "IMAP" ? "IMAP" : "Webhook"}
-                  </td>
-                  <td className="px-3 py-2.5">{team.userCount}</td>
-                  {canManage ? (
-                    <td className="px-3 py-2.5">
-                      <div className="flex flex-wrap gap-1">
-                        <EditTeamButton team={team} />
-                        <DeleteTeamButton
-                          teamId={team.id}
-                          teamName={team.name}
-                          disabled={team.userCount > 0}
-                        />
-                      </div>
-                    </td>
-                  ) : null}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <TeamsDataTable
+        data={rows}
+        canManage={canManage}
+        renderActions={canManage ? renderActions : undefined}
+      />
     </div>
   );
 }

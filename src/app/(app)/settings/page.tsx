@@ -71,6 +71,7 @@ export default async function SettingsPage() {
                   imapUser: team.imapUser,
                   imapSecure: team.imapSecure,
                   imapMailbox: team.imapMailbox,
+                  imapAllowedSenderDomains: team.imapAllowedSenderDomains,
                   hasImapPassword: Boolean(team.imapPassword),
                   userCount: team._count.users,
                 }))}

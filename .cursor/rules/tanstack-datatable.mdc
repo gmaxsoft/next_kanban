@@ -1,0 +1,29 @@
+---
+description: Default list UI pattern — TanStack Table DataTable for app modules
+alwaysApply: true
+---
+
+# TanStack DataTable (default lists)
+
+For new list/module UIs in this app, **use the existing TanStack Table pattern** — do not invent new HTML tables or URL `ListFilters`/`ListPagination` for standard lists.
+
+## Pattern (reference: `/users`)
+
+1. **RSC page** loads the full (scoped) dataset and maps rows to a serializable row type.
+2. **Client `*DataTable`** owns table state: sorting, column filters, `globalFilter`, pagination.
+3. Wrap with `<Card>` on the page; put **`CardHeader` + global search (`CardAction`) + `CardContent`** inside the data-table component (same as `UsersDataTable`).
+4. Reuse shared pieces:
+   - `src/components/data-table/data-table.tsx`
+   - `data-table-column-header.tsx`
+   - `data-table-faceted-filter.tsx`
+   - `data-table-pagination.tsx`
+5. Use `@tanstack/react-table/legacy`: `useLegacyTable`, `legacyCreateColumnHelper`, `LegacyColumnDef`.
+6. Text filters: `includesString`; faceted selects: `equalsString` + `meta.filterVariant`.
+7. Row **edit** small forms → `DraggableDialog`. Tall forms (e.g. team IMAP) may keep `Sheet`.
+8. Optional **Row DnD**: set `enableRowDnd` on `DataTable`, add a drag-handle column (`RowDragHandleCell`), `getRowId`, and local `arrayMove` on drag end (clear sorting so order is visible).
+
+## Do not
+
+- Add new URL-driven `ListFilters` for ordinary CRUD lists.
+- Build one-off `<table>` markup when `DataTable` fits.
+- Introduce another table library.

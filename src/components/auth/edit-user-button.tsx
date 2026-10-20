@@ -5,15 +5,12 @@ import { Pencil } from "lucide-react";
 
 import { updateUser, type AuthActionState } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
+import {
+  DraggableDialog,
+  DraggableDialogContent,
+} from "@/components/ui/draggable-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { useActionToast } from "@/hooks/use-action-toast";
 
 const selectClassName =
@@ -67,18 +64,12 @@ export function EditUserButton({
         Edytuj
       </Button>
 
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent
-          showCloseButton
-          className="w-full gap-0 overflow-y-auto sm:max-w-md"
+      <DraggableDialog open={open} onOpenChange={setOpen}>
+        <DraggableDialogContent
+          title="Edycja konta"
+          description={`${user.name} · ${user.roleName}`}
+          open={open}
         >
-          <SheetHeader className="border-b">
-            <SheetTitle>Edycja konta</SheetTitle>
-            <SheetDescription>
-              {user.name} · {user.roleName}
-            </SheetDescription>
-          </SheetHeader>
-
           <form action={formAction} className="grid gap-4 p-4">
             <input type="hidden" name="userId" value={user.id} />
 
@@ -183,8 +174,8 @@ export function EditUserButton({
               {pending ? "Zapisywanie..." : "Zapisz zmiany"}
             </Button>
           </form>
-        </SheetContent>
-      </Sheet>
+        </DraggableDialogContent>
+      </DraggableDialog>
     </>
   );
 }

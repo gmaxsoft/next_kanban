@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 
 import {
@@ -9,18 +9,18 @@ import {
   updateRole,
   type SettingsActionState,
 } from "@/app/actions/settings";
+import {
+  RolesDataTable,
+  type RolesTableRow,
+} from "@/components/settings/roles-data-table";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DraggableDialog,
+  DraggableDialogContent,
+} from "@/components/ui/draggable-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { SYSTEM_ADMIN_SLUG } from "@/lib/rbac";
 
@@ -43,22 +43,48 @@ export function RolesPanel({
   roles: RoleRow[];
   canManage: boolean;
 }) {
-  const [query, setQuery] = useState("");
   const [createState, createAction, createPending] = useActionState<
     SettingsActionState,
     FormData
   >(createRole, null);
   useActionToast(createState);
 
-  const filteredRoles = roles.filter((role) => {
-    const q = query.trim().toLowerCase();
-    if (!q) {
-      return true;
-    }
-    return (
-      role.name.toLowerCase().includes(q) || role.slug.toLowerCase().includes(q)
-    );
-  });
+  const rows: RolesTableRow[] = useMemo(
+    () =>
+      roles.map((role) => {
+        const permissionLabel = role.isAdmin
+          ? "Administrator"
+          : "Standardowe";
+        return {
+          ...role,
+          permissionLabel,
+          searchText: [role.name, role.slug, permissionLabel]
+            .join(" ")
+            .toLowerCase(),
+        };
+      }),
+    [roles],
+  );
+
+  const renderActions = useCallback(
+    (role: RolesTableRow) => (
+      <>
+        <EditRoleButton role={role} />
+        {role.slug === SYSTEM_ADMIN_SLUG ? (
+          <span className="self-center text-xs text-muted-foreground">
+            Chroniona
+          </span>
+        ) : (
+          <DeleteRoleButton
+            roleId={role.id}
+            roleName={role.name}
+            disabled={role.userCount > 0}
+          />
+        )}
+      </>
+    ),
+    [],
+  );
 
   return (
     <div className="grid gap-6">
@@ -100,77 +126,11 @@ export function RolesPanel({
         </p>
       )}
 
-      <div className="grid gap-2">
-        <Label htmlFor="roles-filter">Filtruj role</Label>
-        <Input
-          id="roles-filter"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Szukaj po nazwie lub slug..."
-        />
-      </div>
-
-      <div className="overflow-x-auto border border-border">
-        <table className="w-full min-w-[32rem] text-left text-sm">
-          <thead className="border-b bg-muted/40 text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 font-medium">Nazwa</th>
-              <th className="px-3 py-2 font-medium">Uprawnienia</th>
-              <th className="px-3 py-2 font-medium">Użytkownicy</th>
-              {canManage ? (
-                <th className="px-3 py-2 font-medium">Akcje</th>
-              ) : null}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRoles.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={canManage ? 4 : 3}
-                  className="px-3 py-4 text-sm text-muted-foreground"
-                >
-                  Brak ról pasujących do filtra.
-                </td>
-              </tr>
-            ) : (
-              filteredRoles.map((role) => (
-                <tr key={role.id} className="border-b last:border-0">
-                  <td className="px-3 py-2.5">
-                    <div className="font-medium">{role.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {role.slug}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <Badge variant={role.isAdmin ? "default" : "secondary"}>
-                      {role.isAdmin ? "Administrator" : "Standardowe"}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-2.5">{role.userCount}</td>
-                  {canManage ? (
-                    <td className="px-3 py-2.5">
-                      <div className="flex flex-wrap gap-1">
-                        <EditRoleButton role={role} />
-                        {role.slug === SYSTEM_ADMIN_SLUG ? (
-                          <span className="self-center text-xs text-muted-foreground">
-                            Chroniona
-                          </span>
-                        ) : (
-                          <DeleteRoleButton
-                            roleId={role.id}
-                            roleName={role.name}
-                            disabled={role.userCount > 0}
-                          />
-                        )}
-                      </div>
-                    </td>
-                  ) : null}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <RolesDataTable
+        data={rows}
+        canManage={canManage}
+        renderActions={canManage ? renderActions : undefined}
+      />
     </div>
   );
 }
@@ -200,12 +160,12 @@ function EditRoleButton({ role }: { role: RoleRow }) {
         <Pencil />
         Edytuj
       </Button>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent showCloseButton className="w-full sm:max-w-md">
-          <SheetHeader className="border-b">
-            <SheetTitle>Edycja roli</SheetTitle>
-            <SheetDescription>{role.slug}</SheetDescription>
-          </SheetHeader>
+      <DraggableDialog open={open} onOpenChange={setOpen}>
+        <DraggableDialogContent
+          title="Edycja roli"
+          description={role.slug}
+          open={open}
+        >
           <form action={formAction} className="grid gap-4 p-4">
             <input type="hidden" name="roleId" value={role.id} />
             <div className="grid gap-2">
@@ -234,8 +194,8 @@ function EditRoleButton({ role }: { role: RoleRow }) {
               {pending ? "Zapisywanie..." : "Zapisz"}
             </Button>
           </form>
-        </SheetContent>
-      </Sheet>
+        </DraggableDialogContent>
+      </DraggableDialog>
     </>
   );
 }
