@@ -52,6 +52,18 @@ export function TaskDetailsForm({
           />
         </div>
 
+        <div className="grid gap-2 sm:max-w-md">
+          <Label htmlFor={`${titleIdPrefix}-requested-by`}>Od kogo</Label>
+          <Input
+            id={`${titleIdPrefix}-requested-by`}
+            name="requestedBy"
+            maxLength={255}
+            defaultValue={task.requestedBy}
+            key={`${task.id}-requested-by-${task.updatedAt}`}
+            placeholder="Osoba lub adres e-mail zgłaszającego"
+          />
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-2">
             <Label htmlFor={`${titleIdPrefix}-priority`}>Priorytet</Label>
@@ -90,7 +102,7 @@ export function TaskDetailsForm({
         </div>
 
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-sm font-medium">Przypisana załoga</legend>
+            <legend className="mb-1 text-sm font-medium">Osoba odpowiedzialna</legend>
           {canManageAssignments ? (
             <div
               className="grid max-h-40 gap-2 overflow-y-auto border border-border p-3"
@@ -117,6 +129,38 @@ export function TaskDetailsForm({
               {task.assignees.length > 0
                 ? task.assignees.map((assignee) => assignee.name).join(", ")
                 : "Nieprzypisane"}
+            </p>
+          )}
+        </fieldset>
+
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-sm font-medium">Obserwujący</legend>
+          {canManageAssignments ? (
+            <div
+              className="grid max-h-40 gap-2 overflow-y-auto border border-border p-3"
+              key={`${task.id}-watchers-${task.updatedAt}`}
+            >
+              {members.map((member) => (
+                <label
+                  key={member.id}
+                  className="flex cursor-pointer items-center gap-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    name="watcherIds"
+                    value={member.id}
+                    defaultChecked={task.watcherIds.includes(member.id)}
+                    className="size-4 accent-primary"
+                  />
+                  <span>{member.name}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {task.watchers.length > 0
+                ? task.watchers.map((watcher) => watcher.name).join(", ")
+                : "Brak obserwujących"}
             </p>
           )}
         </fieldset>

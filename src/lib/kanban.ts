@@ -28,19 +28,31 @@ export type TaskComment = {
   author: BoardMember;
 };
 
+export type TaskAttachmentSummary = {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+};
+
 export type TaskDetails = {
   id: string;
   title: string;
+  requestedBy: string;
+  teamId: string;
   description: string;
   priority: Priority;
   dueDate: string | null;
   assigneeIds: string[];
   assignees: BoardAssignee[];
+  watcherIds: string[];
+  watchers: BoardAssignee[];
   columnTitle: string;
   createdByName: string;
   createdAt: string;
   updatedAt: string;
   comments: TaskComment[];
+  attachments: TaskAttachmentSummary[];
 };
 
 export type BoardColumn = {

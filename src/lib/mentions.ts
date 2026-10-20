@@ -64,28 +64,48 @@ export function extractMentionedUserIds(
   return [...ids];
 }
 
-export function renderCommentWithMentions(content: string) {
+export function renderCommentWithMentions(
+  content: string,
+  members: MentionMember[] = [],
+) {
   const parts: Array<{ type: "text" | "mention"; value: string }> = [];
-  const pattern = /(^|[\s([{"'])(@[^\s)\]},.!?;:]+(?:\s+[^\s)\]},.!?;:]+)*)/gu;
   let lastIndex = 0;
-  let match: RegExpExecArray | null;
+  const candidates = members
+    .flatMap((member) =>
+      mentionAliases(member, members).map((alias) => ({ alias })),
+    )
+    .sort((a, b) => b.alias.length - a.alias.length);
 
-  while ((match = pattern.exec(content)) !== null) {
-    const full = match[0];
-    const prefix = match[1] ?? "";
-    const mention = match[2] ?? "";
-    const start = match.index;
-
-    if (start > lastIndex) {
-      parts.push({ type: "text", value: content.slice(lastIndex, start) });
+  for (let index = 0; index < content.length; index += 1) {
+    if (
+      content[index] !== "@" ||
+      (index > 0 && !/[\s([{"']/.test(content[index - 1]))
+    ) {
+      continue;
     }
 
-    if (prefix) {
-      parts.push({ type: "text", value: prefix });
+    const candidate = candidates.find(({ alias }) => {
+      const end = index + 1 + alias.length;
+      const afterAlias = content[end];
+      return (
+        content.slice(index + 1, end).toLowerCase() === alias.toLowerCase() &&
+        (afterAlias === undefined || /[\s)\]},.!?;:]/.test(afterAlias))
+      );
+    });
+
+    if (!candidate) continue;
+
+    if (index > lastIndex) {
+      parts.push({ type: "text", value: content.slice(lastIndex, index) });
     }
 
-    parts.push({ type: "mention", value: mention });
-    lastIndex = start + full.length;
+    const mentionEnd = index + 1 + candidate.alias.length;
+    parts.push({
+      type: "mention",
+      value: content.slice(index, mentionEnd),
+    });
+    lastIndex = mentionEnd;
+    index = mentionEnd - 1;
   }
 
   if (lastIndex < content.length) {

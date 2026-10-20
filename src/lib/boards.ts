@@ -147,7 +147,11 @@ export async function listAssignedTasks(
     where,
     skip: meta.skip,
     take: meta.take,
-    orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+    orderBy: [
+      { listOrder: "asc" },
+      { dueDate: "asc" },
+      { createdAt: "desc" },
+    ],
     include: {
       column: {
         select: {
@@ -162,6 +166,9 @@ export async function listAssignedTasks(
         },
       },
       assignments: {
+        include: { user: assigneeSelect },
+      },
+      watchers: {
         include: { user: assigneeSelect },
       },
     },
@@ -238,12 +245,29 @@ export async function getTaskDetails(
       assignments: {
         include: { user: assigneeSelect },
       },
+      watchers: {
+        include: { user: assigneeSelect },
+      },
       createdBy: { select: { name: true } },
-      column: { select: { title: true } },
+      column: {
+        select: {
+          title: true,
+          board: { select: { teamId: true } },
+        },
+      },
       comments: {
         orderBy: { createdAt: "asc" },
         include: {
           author: { select: { id: true, name: true, avatarUrl: true } },
+        },
+      },
+      attachments: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          originalName: true,
+          mimeType: true,
+          size: true,
         },
       },
     },
@@ -254,15 +278,20 @@ export async function getTaskDetails(
   }
 
   const assignees = task.assignments.map((assignment) => assignment.user);
+  const watchers = task.watchers.map((watcher) => watcher.user);
 
   return {
     id: task.id,
     title: task.title,
+    requestedBy: task.requestedBy ?? "",
+    teamId: task.column.board.teamId,
     description: task.description ?? "",
     priority: task.priority,
     dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
     assigneeIds: assignees.map((assignee) => assignee.id),
     assignees,
+    watcherIds: watchers.map((watcher) => watcher.id),
+    watchers,
     columnTitle: task.column.title,
     createdByName: task.createdBy.name,
     createdAt: task.createdAt.toISOString(),
@@ -273,6 +302,7 @@ export async function getTaskDetails(
       createdAt: comment.createdAt.toISOString(),
       author: comment.author,
     })),
+    attachments: task.attachments,
   };
 }
 

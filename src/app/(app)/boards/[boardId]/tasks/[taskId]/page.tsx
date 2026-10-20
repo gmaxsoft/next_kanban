@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
+import { TaskAttachments } from "@/components/kanban/task-attachments";
 import { TaskDetailsForm } from "@/components/kanban/task-details-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,22 +25,26 @@ type TaskDetailsPageProps = {
 export async function generateMetadata({
   params,
 }: TaskDetailsPageProps): Promise<Metadata> {
+  const session = await requireAuth();
   const { boardId, taskId } = await params;
   const task = await getTaskDetails(boardId, taskId);
 
   return {
-    title: task ? `Szczegóły: ${task.title}` : "Szczegóły zadania",
+    title:
+      task && (session.user.isAdmin || task.teamId === session.user.teamId)
+        ? `Szczegóły: ${task.title}`
+        : "Szczegóły zadania",
   };
 }
 
 export default async function TaskDetailsPage({ params }: TaskDetailsPageProps) {
   const session = await requireAuth();
   const { boardId, taskId } = await params;
-  const canManageAssignments = session.user.isAdmin;
+  const canManageAssignments = session.user.isAdmin || session.user.teamId !== null;
 
   const board = await getBoardWithColumns(boardId);
 
-  if (!board) {
+  if (!board || (!session.user.isAdmin && board.teamId !== session.user.teamId)) {
     notFound();
   }
 
@@ -94,6 +99,22 @@ export default async function TaskDetailsPage({ params }: TaskDetailsPageProps) 
             members={members}
             canManageAssignments={canManageAssignments}
             titleIdPrefix="page-task"
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Załączniki</CardTitle>
+          <CardDescription>
+            PDF i obrazy mają podgląd w aplikacji; DOCX/XLSX pobierzesz lokalnie.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TaskAttachments
+            boardId={boardId}
+            taskId={taskId}
+            attachments={task.attachments}
           />
         </CardContent>
       </Card>

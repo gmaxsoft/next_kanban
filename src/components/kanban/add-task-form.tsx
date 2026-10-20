@@ -29,6 +29,7 @@ export function AddTaskForm({
       <input type="hidden" name="boardId" value={boardId} />
       <input type="hidden" name="columnId" value={columnId} />
       <Input name="title" placeholder="Nowe zadanie..." required maxLength={120} />
+      <Input name="requestedBy" placeholder="Od kogo (opcjonalnie)" maxLength={255} />
       <div className="flex items-center gap-2">
         <select name="priority" defaultValue="MEDIUM" className={selectClassName}>
           <option value="LOW">Niski</option>
