@@ -7,6 +7,10 @@ System ticketów tworzy zgłoszenia z **przychodzących e-maili**. Dostępne są
 
 Każdy zespół może mieć własną skrzynkę (np. `it@pwginfo.pl`). Odpowiedzi z panelu idą do klienta przez Resend z numerem ticketu w temacie (`[T-101]`).
 
+Tickety mają **priorytet** (`LOW` / `MEDIUM` / `HIGH`, domyślnie `MEDIUM`) — ustawiany z listy lub ze szczegółów zgłoszenia.
+
+**Status ręczny:** po zmianie statusu w panelu ustawiane jest `statusLocked`. Odpowiedź klienta (e-mail) oraz automatyczne przejścia przy odpowiedzi agenta / tworzeniu zadania **nie nadpisują** wtedy statusu — wiadomość i powiadomienie nadal powstają. Odblokowanie / osobna automatyzacja to opcja na później.
+
 Dostęp do `/tickets` mają tylko konta **ADMINISTRATOR**.
 
 ---
@@ -235,8 +239,8 @@ Statusy: `Otwarte` · `W trakcie` · `Rozwiązane`. Odpowiedź e-mail lub nowe i
 | Zmień status | Otwarte / W trakcie / Rozwiązane |
 | Zapisz zespół | Ręczny wybór zespołu (nadpisuje auto-mapowanie) |
 | Utwórz zadanie na tablicy Kanban | Karta w kolumnie „Do zrobienia” / „To Do” / pierwszej kolumnie; tytuł `[T-101] …`; link ticket ↔ task |
-| Wyślij e-mail | Odpowiedź do nadawcy; temat `Re: [T-101] …`; wymaga `RESEND_API_KEY`; `@imię` powiadamia osobę z zespołu |
-| Notatka wewnętrzna | Tylko w panelu, bez maila do klienta; `@imię` powiadamia osobę z zespołu |
+| Wyślij e-mail | Odpowiedź do nadawcy; temat `Re: [T-101] …`; wymaga `RESEND_API_KEY` |
+| Notatka wewnętrzna | Tylko w panelu, bez maila |
 
 ---
 

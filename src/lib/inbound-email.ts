@@ -9,7 +9,13 @@ import {
   parseTicketRef,
   stripTicketRef,
 } from "@/lib/tickets";
+import { sendTicketAcknowledgementEmail, ticketUrl } from "@/lib/mail";
+import { notifyTicketParticipants } from "@/lib/ticket-notifications";
 import { prisma } from "@/lib/prisma";
+import {
+  storeTicketAttachments,
+  type IncomingTicketAttachment,
+} from "@/lib/ticket-attachments.server";
 
 /** Uniwersalny obiekt e-maila dla webhooka i IMAP. */
 export type IncomingEmailInput = {
@@ -20,6 +26,7 @@ export type IncomingEmailInput = {
   text: string | null;
   html: string | null;
   messageId: string | null;
+  attachments?: IncomingTicketAttachment[];
   /** Identyfikator zewnętrzny (np. Resend email_id) — używany przy deduplikacji. */
   externalId?: string | null;
 };
@@ -33,12 +40,84 @@ export type ProcessIncomingEmailResult = {
   ticketId: string;
   created: boolean;
   duplicate: boolean;
+  taskCreated: boolean;
+  acknowledgementSent: boolean;
 };
 
 export type ProcessIncomingEmailOptions = {
   /** Wymusza zespół (np. skrzynka IMAP należąca do konkretnego teamu). */
   preferredTeamId?: string | null;
 };
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return entities[character] ?? character;
+  });
+}
+
+async function sendPendingTicketAcknowledgement(ticketId: string) {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: {
+      team: {
+        select: {
+          inboundEmail: true,
+          imapHost: true,
+          imapUser: true,
+          imapPassword: true,
+        },
+      },
+    },
+  });
+
+  if (!ticket || ticket.acknowledgementSentAt) {
+    return false;
+  }
+
+  const team = ticket.team;
+  if (
+    !team?.inboundEmail ||
+    !team.imapHost?.startsWith("imap.") ||
+    !team.imapUser ||
+    !team.imapPassword
+  ) {
+    return false;
+  }
+
+  if (ticket.requesterEmail.toLowerCase() === team.inboundEmail.toLowerCase()) {
+    await prisma.ticket.update({
+      where: { id: ticket.id },
+      data: { acknowledgementSentAt: new Date() },
+    });
+    return false;
+  }
+
+  const smtpHost = team.imapHost.replace(/^imap\./i, "smtp.");
+  await sendTicketAcknowledgementEmail({
+    toEmail: ticket.requesterEmail,
+    requesterName: ticket.requesterName,
+    ticketId: formatTicketId(ticket.number),
+    subject: ticket.subject,
+    ticketUrl: ticketUrl(ticket.id),
+    inboundEmail: team.inboundEmail,
+    smtpHost,
+    smtpUser: team.imapUser,
+    smtpPassword: team.imapPassword,
+  });
+
+  await prisma.ticket.update({
+    where: { id: ticket.id },
+    data: { acknowledgementSentAt: new Date() },
+  });
+  return true;
+}
 
 function getResend() {
   const apiKey = process.env.RESEND_API_KEY?.trim();
@@ -272,10 +351,16 @@ export async function processIncomingEmail(
   });
 
   if (existingMessage) {
+    await storeTicketAttachments(existingMessage.id, email.attachments);
+    const acknowledgementSent = await sendPendingTicketAcknowledgement(
+      existingMessage.ticketId,
+    );
     return {
       ticketId: existingMessage.ticketId,
       created: false,
       duplicate: true,
+      taskCreated: false,
+      acknowledgementSent,
     };
   }
 
@@ -293,11 +378,11 @@ export async function processIncomingEmail(
   if (ticketNumber) {
     const ticket = await prisma.ticket.findUnique({
       where: { number: ticketNumber },
-      select: { id: true, status: true },
+      select: { id: true, status: true, statusLocked: true },
     });
 
     if (ticket) {
-      await prisma.$transaction([
+      const [createdMessage] = await prisma.$transaction([
         prisma.ticketMessage.create({
           data: {
             ticketId: ticket.id,
@@ -314,10 +399,22 @@ export async function processIncomingEmail(
           where: { id: ticket.id },
           data: {
             lastMessageAt: new Date(),
-            status: ticket.status === "RESOLVED" ? "OPEN" : ticket.status,
+            // Manual status stays put; otherwise reopen resolved tickets.
+            ...(ticket.statusLocked
+              ? {}
+              : {
+                  status:
+                    ticket.status === "RESOLVED" ? "OPEN" : ticket.status,
+                }),
           },
         }),
       ]);
+
+      await notifyTicketParticipants({
+        ticketId: ticket.id,
+        title: "Nowa wiadomość w tickecie",
+        body: `Otrzymano odpowiedź od ${email.fromName || email.fromEmail}.`,
+      });
 
       if (teamId) {
         await prisma.ticket.updateMany({
@@ -326,7 +423,15 @@ export async function processIncomingEmail(
         });
       }
 
-      return { ticketId: ticket.id, created: false, duplicate: false };
+      await storeTicketAttachments(createdMessage.id, email.attachments);
+
+      return {
+        ticketId: ticket.id,
+        created: false,
+        duplicate: false,
+        taskCreated: false,
+        acknowledgementSent: false,
+      };
     }
   }
 
@@ -337,6 +442,7 @@ export async function processIncomingEmail(
       subject: subject.slice(0, 255),
       requesterEmail: email.fromEmail,
       requesterName: email.fromName,
+      requestedBy: email.fromName || email.fromEmail,
       teamId,
       lastMessageAt: new Date(),
       messages: {
@@ -351,14 +457,31 @@ export async function processIncomingEmail(
         },
       },
     },
-    select: { id: true, number: true },
+    select: {
+      id: true,
+      number: true,
+      messages: { select: { id: true } },
+    },
   });
+
+  const createdMessage = created.messages[0];
+  if (createdMessage) {
+    await storeTicketAttachments(createdMessage.id, email.attachments);
+  }
 
   console.info(
     `[inbound-email] nowy ticket ${formatTicketId(created.number)} od ${email.fromEmail}`,
   );
 
-  return { ticketId: created.id, created: true, duplicate: false };
+    const acknowledgementSent = await sendPendingTicketAcknowledgement(created.id);
+
+  return {
+    ticketId: created.id,
+    created: true,
+    duplicate: false,
+    taskCreated: false,
+    acknowledgementSent,
+  };
 }
 
 /** Alias kompatybilności wstecznej. */

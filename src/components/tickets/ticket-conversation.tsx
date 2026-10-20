@@ -1,8 +1,9 @@
 import type { TicketMessageKind } from "@prisma/client";
 
-import { MentionBody } from "@/components/mentions/mention-body";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { TicketAttachments } from "@/components/tickets/ticket-attachments";
+import { TicketInternalNote } from "@/components/tickets/ticket-internal-note";
 import { getInitials } from "@/lib/user";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +21,15 @@ export type TicketMessageView = {
     name: string;
     avatarUrl: string | null;
   } | null;
+  attachments: Array<{
+    id: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+  }>;
 };
+
+type TicketMentionMember = { id: string; name: string };
 
 const kindLabel: Record<TicketMessageKind, string> = {
   INBOUND: "E-mail od klienta",
@@ -37,8 +46,14 @@ function formatDate(value: string) {
 
 export function TicketConversation({
   messages,
+  currentUserId,
+  isAdmin,
+  members,
 }: {
   messages: TicketMessageView[];
+  currentUserId: string;
+  isAdmin: boolean;
+  members: TicketMentionMember[];
 }) {
   if (messages.length === 0) {
     return (
@@ -101,13 +116,19 @@ export function TicketConversation({
                 className="prose-editor max-w-none text-sm leading-6"
                 dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
               />
-            ) : message.bodyText ? (
-              <MentionBody content={message.bodyText} />
+            ) : message.kind === "INTERNAL" ? (
+              <TicketInternalNote
+                messageId={message.id}
+                bodyText={message.bodyText ?? ""}
+                canEdit={isAdmin || message.author?.id === currentUserId}
+                members={members}
+              />
             ) : (
               <p className="whitespace-pre-wrap text-sm leading-6">
-                (brak treści)
+                {message.bodyText || "(brak treści)"}
               </p>
             )}
+            <TicketAttachments attachments={message.attachments} />
           </li>
         );
       })}

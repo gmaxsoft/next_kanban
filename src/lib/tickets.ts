@@ -1,4 +1,4 @@
-import type { Prisma, TicketStatus } from "@prisma/client";
+import type { Priority, Prisma, TicketStatus } from "@prisma/client";
 
 import { buildPaginationMeta, type PaginationMeta, type PaginationState } from "@/lib/list-query";
 import { prisma } from "@/lib/prisma";
@@ -17,11 +17,15 @@ export type TicketListItem = {
   displayId: string;
   subject: string;
   status: TicketStatus;
+  priority: Priority;
   requesterEmail: string;
   requesterName: string | null;
+  requestedBy: string;
   teamId: string | null;
   teamName: string | null;
   taskId: string | null;
+  assigneeId: string | null;
+  assigneeName: string | null;
   createdAt: string;
   lastMessageAt: string;
 };
@@ -129,9 +133,14 @@ export async function listTickets(
     where,
     skip: meta.skip,
     take: meta.take,
-    orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
+    orderBy: [
+      { listOrder: "asc" },
+      { lastMessageAt: "desc" },
+      { createdAt: "desc" },
+    ],
     include: {
       team: { select: { id: true, name: true } },
+      assignee: { select: { id: true, name: true } },
     },
   });
 
@@ -143,11 +152,15 @@ export async function listTickets(
       displayId: formatTicketId(ticket.number),
       subject: ticket.subject,
       status: ticket.status,
+      priority: ticket.priority,
       requesterEmail: ticket.requesterEmail,
       requesterName: ticket.requesterName,
+      requestedBy: ticket.requestedBy ?? ticket.requesterName ?? ticket.requesterEmail,
       teamId: ticket.teamId,
       teamName: ticket.team?.name ?? null,
       taskId: ticket.taskId,
+      assigneeId: ticket.assigneeId,
+      assigneeName: ticket.assignee?.name ?? null,
       createdAt: ticket.createdAt.toISOString(),
       lastMessageAt: ticket.lastMessageAt.toISOString(),
     })),
@@ -159,6 +172,8 @@ export async function getTicketDetails(ticketId: string) {
     where: { id: ticketId },
     include: {
       team: { select: { id: true, name: true, inboundEmail: true } },
+      assignee: { select: { id: true, name: true } },
+      watchers: { select: { userId: true } },
       task: {
         select: {
           id: true,
@@ -170,6 +185,10 @@ export async function getTicketDetails(ticketId: string) {
         orderBy: { createdAt: "asc" },
         include: {
           author: { select: { id: true, name: true, avatarUrl: true } },
+          attachments: {
+            orderBy: { createdAt: "asc" },
+            select: { id: true, originalName: true, mimeType: true, size: true },
+          },
         },
       },
     },

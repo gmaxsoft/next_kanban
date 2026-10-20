@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState } from "react";
 
 import {
   addTicketInternalNote,
@@ -10,15 +10,17 @@ import {
 import { MentionTextarea } from "@/components/mentions/mention-textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useActionToast } from "@/hooks/use-action-toast";
-import type { BoardMember } from "@/lib/kanban";
+
+export type TicketMentionMember = { id: string; name: string };
 
 export function TicketReplyForm({
   ticketId,
   members,
 }: {
   ticketId: string;
-  members: BoardMember[];
+  members: TicketMentionMember[];
 }) {
   const [replyState, replyAction, replyPending] = useActionState<
     TicketActionState,
@@ -28,23 +30,9 @@ export function TicketReplyForm({
     TicketActionState,
     FormData
   >(addTicketInternalNote, null);
-  const [replyResetKey, setReplyResetKey] = useState(0);
-  const [noteResetKey, setNoteResetKey] = useState(0);
 
   useActionToast(replyState);
   useActionToast(noteState);
-
-  useEffect(() => {
-    if (replyState?.success) {
-      setReplyResetKey((value) => value + 1);
-    }
-  }, [replyState]);
-
-  useEffect(() => {
-    if (noteState?.success) {
-      setNoteResetKey((value) => value + 1);
-    }
-  }, [noteState]);
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -54,19 +42,16 @@ export function TicketReplyForm({
           <h3 className="text-sm font-semibold">Odpowiedź do klienta</h3>
           <p className="text-xs text-muted-foreground">
             Wyśle e-mail z tematem zawierającym numer ticketu, np. [T-101].
-            Użyj @, aby powiadomić osobę z zespołu w aplikacji.
           </p>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="reply-body">Treść</Label>
-          <MentionTextarea
+          <Textarea
             id="reply-body"
             name="body"
             required
             rows={5}
-            members={members}
-            resetKey={replyResetKey}
-            placeholder="Dziękujemy za zgłoszenie… użyj @ aby wspomnieć osobę"
+            placeholder="Dziękujemy za zgłoszenie..."
           />
         </div>
         <Button type="submit" disabled={replyPending} className="w-fit">
@@ -79,8 +64,8 @@ export function TicketReplyForm({
         <div>
           <h3 className="text-sm font-semibold">Notatka wewnętrzna</h3>
           <p className="text-xs text-muted-foreground">
-            Widoczna tylko w panelu — bez wysyłki do klienta. @imię wysyła
-            powiadomienie do oznaczonej osoby.
+            Widoczna tylko w panelu — bez wysyłki do klienta. Użyj @, aby
+            oznaczyć osobę (dostanie powiadomienie).
           </p>
         </div>
         <div className="grid gap-2">
@@ -91,8 +76,8 @@ export function TicketReplyForm({
             required
             rows={5}
             members={members}
-            resetKey={noteResetKey}
-            placeholder="Notatka dla zespołu… użyj @ aby wspomnieć osobę"
+            placeholder="Notatka dla zespołu… użyj @, aby oznaczyć osobę"
+            resetKey={noteState?.success}
           />
         </div>
         <Button

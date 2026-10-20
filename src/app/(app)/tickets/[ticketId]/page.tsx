@@ -6,8 +6,12 @@ import { ArrowLeft } from "lucide-react";
 import { CreateTaskFromTicketForm } from "@/components/tickets/create-task-from-ticket-form";
 import { TicketConversation } from "@/components/tickets/ticket-conversation";
 import { TicketReplyForm } from "@/components/tickets/ticket-reply-form";
+import { TicketAssigneeForm } from "@/components/tickets/ticket-assignee-form";
+import { TicketAttachmentsPanel } from "@/components/tickets/ticket-attachments";
+import { TicketPriorityForm } from "@/components/tickets/ticket-priority-form";
 import { TicketStatusBadge } from "@/components/tickets/ticket-status-badge";
 import { TicketStatusForm } from "@/components/tickets/ticket-status-form";
+import { PriorityBadge } from "@/components/kanban/priority-badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,9 +20,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { requireAdmin } from "@/lib/auth-utils";
+import { requireAuth } from "@/lib/auth-utils";
 import { taskPath } from "@/lib/board-query";
-import { listAssignBoards, listBoardMembers } from "@/lib/boards";
+import { listAssignBoards } from "@/lib/boards";
 import { prisma } from "@/lib/prisma";
 import { sanitizeRichText } from "@/lib/rich-text";
 import { formatTicketId, getTicketDetails } from "@/lib/tickets";
@@ -30,11 +34,16 @@ type TicketPageProps = {
 export async function generateMetadata({
   params,
 }: TicketPageProps): Promise<Metadata> {
+  const session = await requireAuth();
   const { ticketId } = await params;
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
-    select: { number: true, subject: true },
+    select: { number: true, subject: true, teamId: true },
   });
+
+  if (ticket && !session.user.isAdmin && ticket.teamId !== session.user.teamId) {
+    return { title: "Ticket" };
+  }
 
   return {
     title: ticket
@@ -44,24 +53,55 @@ export async function generateMetadata({
 }
 
 export default async function TicketDetailsPage({ params }: TicketPageProps) {
-  await requireAdmin();
+  const session = await requireAuth();
   const { ticketId } = await params;
   const ticket = await getTicketDetails(ticketId);
 
-  if (!ticket) {
+  if (
+    !ticket ||
+    (!session.user.isAdmin && ticket.teamId !== session.user.teamId)
+  ) {
     notFound();
   }
 
+  const isAdmin = session.user.isAdmin;
   const [teams, boards, members] = await Promise.all([
-    prisma.team.findMany({
+    isAdmin
+      ? prisma.team.findMany({
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, inboundEmail: true },
+        })
+      : Promise.resolve([]),
+    isAdmin
+      ? listAssignBoards()
+      : session.user.teamId
+        ? prisma.board.findMany({
+            where: { teamId: session.user.teamId },
+            orderBy: { title: "asc" },
+            select: { id: true, title: true, teamId: true, columns: { orderBy: { order: "asc" }, select: { id: true, title: true, order: true } } },
+          })
+        : Promise.resolve([]),
+    prisma.user.findMany({
+      where: {
+        isActive: true,
+        ...(!isAdmin && ticket.teamId ? { teamId: ticket.teamId } : {}),
+      },
+      select: { id: true, name: true, teamId: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, inboundEmail: true },
     }),
-    listAssignBoards(),
-    listBoardMembers(ticket.teamId ?? undefined),
   ]);
 
   const displayId = formatTicketId(ticket.number);
+  const allAttachments = ticket.messages.flatMap((message) =>
+    message.attachments.map((attachment) => ({
+      id: attachment.id,
+      originalName: attachment.originalName,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      messageId: message.id,
+      createdAt: message.createdAt.toISOString(),
+    })),
+  );
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -81,17 +121,45 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
               {displayId}
             </h2>
             <TicketStatusBadge status={ticket.status} />
+            <PriorityBadge priority={ticket.priority} />
           </div>
           <p className="text-lg font-medium">{ticket.subject}</p>
           <p className="text-sm text-muted-foreground">
-            {ticket.requesterName ? `${ticket.requesterName} · ` : null}
-            {ticket.requesterEmail}
+            <span className="font-medium">Od kogo:</span>{" "}
+            {ticket.requestedBy ?? ticket.requesterName ?? ticket.requesterEmail}
+            {ticket.requesterEmail !== ticket.requestedBy
+              ? ` · ${ticket.requesterEmail}`
+              : null}
             {ticket.team ? ` · zespół ${ticket.team.name}` : null}
           </p>
         </div>
 
-        <TicketStatusForm ticketId={ticket.id} status={ticket.status} />
+        <div className="flex flex-col gap-3 sm:items-end">
+          <TicketStatusForm ticketId={ticket.id} status={ticket.status} />
+          <TicketPriorityForm
+            ticketId={ticket.id}
+            priority={ticket.priority}
+          />
+        </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Odpowiedzialny i obserwujący</CardTitle>
+          <CardDescription>
+            Obserwujący dostają powiadomienia w aplikacji i e-mailem o zmianach w tickecie.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TicketAssigneeForm
+            ticketId={ticket.id}
+            assigneeId={ticket.assigneeId}
+            watcherIds={ticket.watchers.map((watcher) => watcher.userId)}
+            requestedBy={ticket.requestedBy ?? ticket.requesterName ?? ticket.requesterEmail}
+            members={members}
+          />
+        </CardContent>
+      </Card>
 
       {ticket.task ? (
         <Card>
@@ -119,9 +187,27 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
           currentTeamId={ticket.teamId}
           teams={teams}
           boards={boards}
+          members={members}
+          requestedBy={ticket.requestedBy ?? ticket.requesterName ?? ticket.requesterEmail}
+          assigneeId={ticket.assigneeId}
+          watcherIds={ticket.watchers.map((watcher) => watcher.userId)}
           hasTask={false}
+          canAssignTeam={isAdmin}
         />
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Załączniki</CardTitle>
+          <CardDescription>
+            Wszystkie pliki z wiadomości e-mail (PDF, obrazy, DOCX, XLSX i inne).
+            PDF i obrazy możesz podglądać w aplikacji.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TicketAttachmentsPanel attachments={allAttachments} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -132,6 +218,11 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
         </CardHeader>
         <CardContent>
           <TicketConversation
+            currentUserId={session.user.id}
+            isAdmin={isAdmin}
+            members={members
+              .filter((member) => ticket.teamId && member.teamId === ticket.teamId)
+              .map(({ id, name }) => ({ id, name }))}
             messages={ticket.messages.map((message) => ({
               id: message.id,
               kind: message.kind,
@@ -150,12 +241,18 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
                     avatarUrl: message.author.avatarUrl,
                   }
                 : null,
+              attachments: message.attachments,
             }))}
           />
         </CardContent>
       </Card>
 
-      <TicketReplyForm ticketId={ticket.id} members={members} />
+      <TicketReplyForm
+        ticketId={ticket.id}
+        members={members
+          .filter((member) => ticket.teamId && member.teamId === ticket.teamId)
+          .map(({ id, name }) => ({ id, name }))}
+      />
     </div>
   );
 }

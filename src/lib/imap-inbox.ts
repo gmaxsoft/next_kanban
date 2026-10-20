@@ -18,6 +18,7 @@ export type ImapTeamConfig = {
   imapPassword: string;
   imapSecure: boolean;
   imapMailbox: string;
+  imapAllowedSenderDomains: string;
 };
 
 export type ImapMailboxResult = {
@@ -25,6 +26,8 @@ export type ImapMailboxResult = {
   teamName: string;
   fetched: number;
   created: number;
+  tasksCreated: number;
+  acknowledgementsSent: number;
   appended: number;
   duplicates: number;
   errors: string[];
@@ -82,6 +85,7 @@ export async function listImapTeams(): Promise<ImapTeamConfig[]> {
       imapPassword: true,
       imapSecure: true,
       imapMailbox: true,
+      imapAllowedSenderDomains: true,
     },
   });
 
@@ -103,6 +107,7 @@ export async function listImapTeams(): Promise<ImapTeamConfig[]> {
       imapPassword: team.imapPassword,
       imapSecure: team.imapSecure,
       imapMailbox: team.imapMailbox?.trim() || "INBOX",
+      imapAllowedSenderDomains: team.imapAllowedSenderDomains || "pwginfo.pl",
     }));
 }
 
@@ -114,6 +119,8 @@ export async function fetchUnreadFromImapMailbox(
     teamName: team.name,
     fetched: 0,
     created: 0,
+    tasksCreated: 0,
+    acknowledgementsSent: 0,
     appended: 0,
     duplicates: 0,
     errors: [],
@@ -135,18 +142,20 @@ export async function fetchUnreadFromImapMailbox(
     const lock = await client.getMailboxLock(team.imapMailbox);
 
     try {
-      for await (const message of client.fetch(
-        { seen: false },
-        {
-          uid: true,
-          source: true,
-        },
-      )) {
-        result.fetched += 1;
-        const uid = message.uid;
+      const unseenUids = await client.search({ seen: false }, { uid: true });
+      const uids = Array.isArray(unseenUids) ? unseenUids : [];
+      result.fetched = uids.length;
+
+      for (const uid of uids) {
 
         try {
-          if (!message.source) {
+          const message = await client.fetchOne(
+            String(uid),
+            { uid: true, source: true },
+            { uid: true },
+          );
+
+          if (!message || !message.source) {
             result.errors.push(`UID ${uid}: brak źródła wiadomości`);
             continue;
           }
@@ -160,6 +169,18 @@ export async function fetchUnreadFromImapMailbox(
 
           if (!fromEmail) {
             result.errors.push(`UID ${uid}: brak nadawcy`);
+            await client.messageFlagsAdd({ uid }, ["\\Seen"]);
+            continue;
+          }
+
+          const senderDomain = fromEmail
+            .slice(fromEmail.lastIndexOf("@") + 1)
+            .toLowerCase();
+          const allowedDomains = team.imapAllowedSenderDomains
+            .split(/[\s,;]+/)
+            .map((domain) => domain.trim().replace(/^@/, "").toLowerCase())
+            .filter(Boolean);
+          if (!allowedDomains.includes(senderDomain)) {
             await client.messageFlagsAdd({ uid }, ["\\Seen"]);
             continue;
           }
@@ -185,6 +206,11 @@ export async function fetchUnreadFromImapMailbox(
             text: parsed.text?.trim() || null,
             html: typeof parsed.html === "string" ? parsed.html : null,
             messageId,
+            attachments: parsed.attachments.map((attachment) => ({
+              filename: attachment.filename,
+              contentType: attachment.contentType,
+              content: attachment.content,
+            })),
             externalId: messageId
               ? null
               : `imap:${team.id}:uid:${uid}`,
@@ -193,6 +219,13 @@ export async function fetchUnreadFromImapMailbox(
           const processed = await processIncomingEmail(email, {
             preferredTeamId: team.id,
           });
+
+          if (processed.taskCreated) {
+            result.tasksCreated += 1;
+          }
+          if (processed.acknowledgementSent) {
+            result.acknowledgementsSent += 1;
+          }
 
           if (processed.duplicate) {
             result.duplicates += 1;
@@ -239,6 +272,8 @@ export async function pollAllImapInboxes(): Promise<{
     teams: number;
     fetched: number;
     created: number;
+    tasksCreated: number;
+    acknowledgementsSent: number;
     appended: number;
     duplicates: number;
     errors: number;
@@ -257,6 +292,11 @@ export async function pollAllImapInboxes(): Promise<{
       teams: teams.length,
       fetched: mailboxes.reduce((sum, item) => sum + item.fetched, 0),
       created: mailboxes.reduce((sum, item) => sum + item.created, 0),
+      tasksCreated: mailboxes.reduce((sum, item) => sum + item.tasksCreated, 0),
+      acknowledgementsSent: mailboxes.reduce(
+        (sum, item) => sum + item.acknowledgementsSent,
+        0,
+      ),
       appended: mailboxes.reduce((sum, item) => sum + item.appended, 0),
       duplicates: mailboxes.reduce((sum, item) => sum + item.duplicates, 0),
       errors: mailboxes.reduce((sum, item) => sum + item.errors.length, 0),
