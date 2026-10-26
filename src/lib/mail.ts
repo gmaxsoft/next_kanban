@@ -1,10 +1,15 @@
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { after } from "next/server";
+import { render } from "@react-email/render";
 import { createTransport } from "nodemailer";
 import { Resend } from "resend";
 
+import { HelpdeskNotificationEmail } from "@/emails/helpdesk-notification";
 import { TaskAssignedEmail } from "@/emails/task-assigned";
 import { TaskCommentedEmail } from "@/emails/task-commented";
+import { TicketAcknowledgedEmail } from "@/emails/ticket-acknowledged";
+import { TicketReplyEmail } from "@/emails/ticket-reply";
+import { TicketStatusChangedEmail } from "@/emails/ticket-status-changed";
 
 function appUrl() {
   return (process.env.AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -16,6 +21,14 @@ export function taskUrl(boardId: string, taskId: string) {
 
 export function ticketUrl(ticketId: string) {
   return `${appUrl()}/tickets/${ticketId}`;
+}
+
+export function absoluteAppUrl(path: string) {
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${appUrl()}${normalized}`;
 }
 
 export function excerpt(value: string, max = 240) {
@@ -39,7 +52,16 @@ function getClient() {
 }
 
 function fromAddress() {
-  return process.env.EMAIL_FROM?.trim() || "Next Kanban <onboarding@resend.dev>";
+  const configured = process.env.EMAIL_FROM?.trim();
+  if (configured) {
+    // Prefer HelpDesk branding if env still says Next Kanban.
+    return configured.replace(/^Next Kanban\b/i, "HelpDesk");
+  }
+  return "HelpDesk <onboarding@resend.dev>";
+}
+
+function helpdeskFrom(inboundEmail: string) {
+  return `HelpDesk <${inboundEmail}>`;
 }
 
 function scheduleMail(work: () => Promise<void>) {
@@ -49,6 +71,28 @@ function scheduleMail(work: () => Promise<void>) {
     } catch (error) {
       console.error("[mail] wysyłka nie powiodła się", error);
     }
+  });
+}
+
+async function renderEmail(react: ReactElement) {
+  const [html, text] = await Promise.all([
+    render(react),
+    render(react, { plainText: true }),
+  ]);
+  return { html, text };
+}
+
+function createSmtpTransport(input: {
+  smtpHost: string;
+  smtpUser: string;
+  smtpPassword: string;
+}) {
+  return createTransport({
+    host: input.smtpHost,
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: { user: input.smtpUser, pass: input.smtpPassword },
   });
 }
 
@@ -152,28 +196,27 @@ export async function sendTicketReplyEmail(input: {
   smtpUser: string;
   smtpPassword: string;
 }) {
-  const transporter = createTransport({
-    host: input.smtpHost,
-    port: 587,
-    secure: false,
-    requireTLS: true,
-    auth: { user: input.smtpUser, pass: input.smtpPassword },
-  });
-
-  const escapedBody = input.body
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\r?\n/g, "<br>");
+  const transporter = createSmtpTransport(input);
+  const href = ticketUrl(input.ticketId);
+  const { html, text } = await renderEmail(
+    TicketReplyEmail({
+      requesterName: input.requesterName ?? "",
+      agentName: input.agentName,
+      displayId: input.displayId,
+      subject: input.subject,
+      body: input.body,
+      ticketUrl: href,
+    }),
+  );
 
   try {
     await transporter.sendMail({
-      from: `Zespół IT <${input.inboundEmail}>`,
+      from: helpdeskFrom(input.inboundEmail),
       to: input.toEmail,
       replyTo: input.inboundEmail,
       subject: input.subject,
-      text: input.body,
-      html: `<p>${escapedBody}</p><hr><p>Odpowiedź do zgłoszenia ${input.displayId}: ${input.subject}</p>`,
+      text,
+      html,
     });
   } finally {
     transporter.close();
@@ -191,39 +234,63 @@ export async function sendTicketAcknowledgementEmail(input: {
   smtpUser: string;
   smtpPassword: string;
 }) {
-  const transporter = createTransport({
-    host: input.smtpHost,
-    port: 587,
-    secure: false,
-    requireTLS: true,
-    auth: {
-      user: input.smtpUser,
-      pass: input.smtpPassword,
-    },
-  });
-  const greeting = input.requesterName?.trim()
-    ? `Dzień dobry ${input.requesterName.trim()},`
-    : "Dzień dobry,";
+  const transporter = createSmtpTransport(input);
+  const { html, text } = await renderEmail(
+    TicketAcknowledgedEmail({
+      requesterName: input.requesterName,
+      displayId: input.ticketId,
+      subject: input.subject,
+      ticketUrl: input.ticketUrl,
+    }),
+  );
   const emailSubject = `[${input.ticketId}] Otrzymaliśmy zgłoszenie: ${input.subject}`;
 
   try {
     await transporter.sendMail({
-      from: `Next Kanban <${input.inboundEmail}>`,
+      from: helpdeskFrom(input.inboundEmail),
       to: input.toEmail,
       replyTo: input.inboundEmail,
       subject: emailSubject,
-      text: [
-        greeting,
-        "",
-        `Otrzymaliśmy Twoje zgłoszenie „${input.subject}”.`,
-        `Numer zgłoszenia: ${input.ticketId}.`,
-        "Nasz zespół IT zajmie się sprawą. Odpowiadając na tę wiadomość, pozostaw numer zgłoszenia w temacie.",
-        "",
-        `Podgląd zgłoszenia w Next Kanban: ${input.ticketUrl}`,
-        "",
-        "Pozdrawiamy,",
-        "Zespół IT",
-      ].join("\n"),
+      text,
+      html,
+    });
+  } finally {
+    transporter.close();
+  }
+}
+
+export async function sendTicketStatusChangedEmail(input: {
+  toEmail: string;
+  requesterName: string | null;
+  displayId: string;
+  subject: string;
+  statusLabel: string;
+  ticketId: string;
+  inboundEmail: string;
+  smtpHost: string;
+  smtpUser: string;
+  smtpPassword: string;
+}) {
+  const transporter = createSmtpTransport(input);
+  const href = ticketUrl(input.ticketId);
+  const { html, text } = await renderEmail(
+    TicketStatusChangedEmail({
+      requesterName: input.requesterName,
+      displayId: input.displayId,
+      subject: input.subject,
+      statusLabel: input.statusLabel,
+      ticketUrl: href,
+    }),
+  );
+
+  try {
+    await transporter.sendMail({
+      from: helpdeskFrom(input.inboundEmail),
+      to: input.toEmail,
+      replyTo: input.inboundEmail,
+      subject: `[${input.displayId}] Status: ${input.statusLabel}`,
+      text,
+      html,
     });
   } finally {
     transporter.close();
@@ -238,22 +305,34 @@ export async function sendTeamNotificationEmail(input: {
   smtpPassword: string;
   subject: string;
   body: string;
+  recipientName?: string | null;
+  actionUrl: string;
+  actionLabel?: string;
+  ticketDisplayId?: string;
+  ticketSubject?: string;
 }) {
-  const transporter = createTransport({
-    host: input.smtpHost,
-    port: 587,
-    secure: false,
-    requireTLS: true,
-    auth: { user: input.smtpUser, pass: input.smtpPassword },
-  });
+  const transporter = createSmtpTransport(input);
+  const actionUrl = absoluteAppUrl(input.actionUrl);
+  const { html, text } = await renderEmail(
+    HelpdeskNotificationEmail({
+      recipientName: input.recipientName,
+      title: input.subject,
+      body: input.body,
+      actionUrl,
+      actionLabel: input.actionLabel,
+      ticketDisplayId: input.ticketDisplayId,
+      ticketSubject: input.ticketSubject,
+    }),
+  );
 
   try {
     await transporter.sendMail({
-      from: `Next Kanban <${input.inboundEmail}>`,
+      from: helpdeskFrom(input.inboundEmail),
       to: input.toEmail,
       replyTo: input.inboundEmail,
       subject: input.subject,
-      text: input.body,
+      text,
+      html,
     });
   } finally {
     transporter.close();

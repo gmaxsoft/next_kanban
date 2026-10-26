@@ -1,12 +1,14 @@
-import { sendTeamNotificationEmail, ticketUrl } from "@/lib/mail";
+import { absoluteAppUrl, sendTeamNotificationEmail, ticketUrl } from "@/lib/mail";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import { formatTicketId } from "@/lib/tickets";
 
 export async function notifyTicketParticipants(input: {
   ticketId: string;
   actorId?: string | null;
   title: string;
   body: string;
+  actionLabel?: string;
 }) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: input.ticketId },
@@ -42,11 +44,14 @@ export async function notifyTicketParticipants(input: {
 
   const people = [...recipients.values()];
   const href = ticketUrl(ticket.id);
-  await createNotifications(people.map((person) => person.id), {
-    title: input.title,
-    body: input.body,
-    href,
-  });
+  await createNotifications(
+    people.map((person) => person.id),
+    {
+      title: input.title,
+      body: input.body,
+      href,
+    },
+  );
 
   const team = ticket.team;
   if (
@@ -62,18 +67,27 @@ export async function notifyTicketParticipants(input: {
     people.map((person) =>
       sendTeamNotificationEmail({
         toEmail: person.email,
+        recipientName: person.name,
         inboundEmail: team.inboundEmail!,
         smtpHost: team.imapHost!.replace(/^imap\./i, "smtp."),
         smtpUser: team.imapUser!,
         smtpPassword: team.imapPassword!,
         subject: input.title,
-        body: `${input.body}\n\nTicket w Next Kanban: ${href}`,
+        body: input.body,
+        actionUrl: absoluteAppUrl(href),
+        actionLabel: input.actionLabel ?? "Otwórz zgłoszenie",
+        ticketDisplayId: formatTicketId(ticket.number),
+        ticketSubject: ticket.subject,
       }),
     ),
   );
   results.forEach((result, index) => {
     if (result.status === "rejected") {
-      console.error("[ticket-notifications] email failed", people[index]?.email, result.reason);
+      console.error(
+        "[ticket-notifications] email failed",
+        people[index]?.email,
+        result.reason,
+      );
     }
   });
 }

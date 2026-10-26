@@ -1,53 +1,7 @@
 import { Button, Heading, Hr, Text } from "react-email";
 
 import { EmailLayout } from "@/emails/layout";
-
-const heading = {
-  color: "#fafafa",
-  fontSize: "22px",
-  fontWeight: 600,
-  lineHeight: "28px",
-  margin: "16px 0 8px",
-};
-
-const text = {
-  color: "#a1a1aa",
-  fontSize: "14px",
-  lineHeight: "22px",
-  margin: "0 0 12px",
-};
-
-const strong = {
-  color: "#fafafa",
-};
-
-const quote = {
-  backgroundColor: "#09090b",
-  borderLeft: "3px solid #4f46e5",
-  borderRadius: "8px",
-  color: "#e4e4e7",
-  fontSize: "14px",
-  lineHeight: "22px",
-  margin: "0 0 16px",
-  padding: "12px 14px",
-  whiteSpace: "pre-wrap" as const,
-};
-
-const button = {
-  backgroundColor: "#4f46e5",
-  borderRadius: "10px",
-  color: "#fafafa",
-  display: "inline-block",
-  fontSize: "14px",
-  fontWeight: 600,
-  padding: "12px 18px",
-  textDecoration: "none",
-};
-
-const divider = {
-  borderColor: "#27272a",
-  margin: "8px 0 16px",
-};
+import { emailStyles as s } from "@/emails/styles";
 
 export function TaskCommentedEmail({
   assigneeName,
@@ -74,21 +28,21 @@ export function TaskCommentedEmail({
           : `${actorName} dodał(a) komentarz w zadaniu „${taskTitle}”.`
       }
     >
-      <Heading style={heading}>
+      <Heading style={s.heading}>
         {mentioned ? "Wspomniano Cię w komentarzu" : "Nowy komentarz w zadaniu"}
       </Heading>
-      <Text style={text}>Cześć {assigneeName},</Text>
-      <Text style={text}>
-        <span style={strong}>{actorName}</span>{" "}
+      <Text style={s.text}>Cześć {assigneeName},</Text>
+      <Text style={s.text}>
+        <span style={s.strong}>{actorName}</span>{" "}
         {mentioned
           ? "oznaczył(a) Cię w komentarzu do zadania"
           : "dodał(a) komentarz do zadania"}{" "}
-        <span style={strong}>„{taskTitle}”</span> na tablicy{" "}
-        <span style={strong}>{boardTitle}</span>.
+        <span style={s.strong}>„{taskTitle}”</span> na tablicy{" "}
+        <span style={s.strong}>{boardTitle}</span>.
       </Text>
-      <Text style={quote}>{commentExcerpt}</Text>
-      <Hr style={divider} />
-      <Button href={taskUrl} style={button}>
+      <Text style={s.quote}>{commentExcerpt}</Text>
+      <Hr style={s.divider} />
+      <Button href={taskUrl} style={s.button}>
         Zobacz komentarz
       </Button>
     </EmailLayout>
