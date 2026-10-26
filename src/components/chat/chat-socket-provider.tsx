@@ -11,7 +11,11 @@ import {
 import { usePathname, useSearchParams } from "next/navigation";
 import { io, type Socket } from "socket.io-client";
 
-import { CHAT_EVENTS, type ChatMessageDto } from "@/lib/chat";
+import {
+  CHAT_EVENTS,
+  type ChatMessageDto,
+  type DirectMessageDto,
+} from "@/lib/chat";
 import {
   flashDocumentTitle,
   stopDocumentTitleFlash,
@@ -44,6 +48,7 @@ export function ChatSocketProvider({
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const socketRef = useRef<Socket | null>(null);
   const activeTeamRef = useRef<string | null>(null);
+  const activeDmRef = useRef<string | null>(null);
   const currentUserRef = useRef(currentUserId);
   const teamIdsKey = teamIds.join(",");
 
@@ -55,8 +60,8 @@ export function ChatSocketProvider({
 
   useEffect(() => {
     const onChat = pathname.startsWith("/chat");
-    const teamId = onChat ? searchParams.get("team") : null;
-    activeTeamRef.current = teamId;
+    activeTeamRef.current = onChat ? searchParams.get("team") : null;
+    activeDmRef.current = onChat ? searchParams.get("dm") : null;
 
     if (onChat) {
       stopDocumentTitleFlash();
@@ -65,6 +70,34 @@ export function ChatSocketProvider({
 
   useEffect(() => {
     let cancelled = false;
+
+    function handleIncoming(input: {
+      authorId: string;
+      authorName: string;
+      content: string;
+      viewingThread: boolean;
+    }) {
+      if (input.authorId === currentUserRef.current) {
+        return;
+      }
+
+      const tabInBackground =
+        typeof document !== "undefined" &&
+        (document.visibilityState === "hidden" || !document.hasFocus());
+
+      if (input.viewingThread && !tabInBackground) {
+        return;
+      }
+
+      if (!input.viewingThread) {
+        setUnreadCount((current) => current + 1);
+      }
+
+      if (tabInBackground) {
+        const preview = input.content.trim().slice(0, 40) || "nowa wiadomość";
+        flashDocumentTitle(`(1) Czat · ${input.authorName}: ${preview}`);
+      }
+    }
 
     async function connect() {
       try {
@@ -91,31 +124,24 @@ export function ChatSocketProvider({
         });
 
         socket.on(CHAT_EVENTS.message, (message: ChatMessageDto) => {
-          if (message.author.id === currentUserRef.current) {
-            return;
-          }
+          handleIncoming({
+            authorId: message.author.id,
+            authorName: message.author.name,
+            content: message.content,
+            viewingThread:
+              !activeDmRef.current &&
+              activeTeamRef.current === message.teamId,
+          });
+        });
 
-          const viewingThisTeam = activeTeamRef.current === message.teamId;
-          const tabInBackground =
-            typeof document !== "undefined" &&
-            (document.visibilityState === "hidden" || !document.hasFocus());
-
-          // Viewing this team in a focused tab — ChatReadMarker clears via server.
-          if (viewingThisTeam && !tabInBackground) {
-            return;
-          }
-
-          if (!viewingThisTeam) {
-            setUnreadCount((current) => current + 1);
-          }
-
-          if (tabInBackground) {
-            const preview =
-              message.content.trim().slice(0, 40) || "nowa wiadomość";
-            flashDocumentTitle(
-              `(1) Czat · ${message.author.name}: ${preview}`,
-            );
-          }
+        socket.on(CHAT_EVENTS.dmMessage, (message: DirectMessageDto) => {
+          handleIncoming({
+            authorId: message.author.id,
+            authorName: message.author.name,
+            content: message.content,
+            // URL uses ?dm=<peerUserId>; incoming author is the peer.
+            viewingThread: activeDmRef.current === message.author.id,
+          });
         });
       } catch {
         // Soft-fail — ChatRoom still connects for messaging.

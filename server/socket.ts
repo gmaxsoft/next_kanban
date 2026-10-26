@@ -8,9 +8,16 @@ loadEnvConfig(process.cwd());
 async function main() {
   const [
     { prisma },
-    { CHAT_EVENTS, chatTeamRoom, toChatMessageDto },
+    {
+      CHAT_EVENTS,
+      chatTeamRoom,
+      chatUserRoom,
+      pairDirectUserIds,
+      toChatMessageDto,
+      toDirectMessageDto,
+    },
     { verifyChatToken },
-    { chatMessageSchema },
+    { chatMessageSchema, directMessageSchema },
   ] = await Promise.all([
     import("../src/lib/prisma"),
     import("../src/lib/chat"),
@@ -109,6 +116,8 @@ async function main() {
     const sockets = socketsByUser.get(user.id) ?? new Set<string>();
     sockets.add(socket.id);
     socketsByUser.set(user.id, sockets);
+
+    void socket.join(chatUserRoom(user.id));
 
     void (async () => {
       const dbUser = await prisma.user.findUnique({
@@ -215,6 +224,85 @@ async function main() {
         );
       } catch (error) {
         console.error("[chat] zapis wiadomości nie powiódł się", error);
+        socket.emit(CHAT_EVENTS.error, {
+          error: "Nie udało się zapisać wiadomości.",
+        });
+      }
+    });
+
+    socket.on(CHAT_EVENTS.dmSend, async (payload: unknown) => {
+      const parsed = directMessageSchema.safeParse(payload);
+
+      if (!parsed.success) {
+        socket.emit(CHAT_EVENTS.error, {
+          error: parsed.error.issues[0]?.message ?? "Nieprawidłowa wiadomość.",
+        });
+        return;
+      }
+
+      if (parsed.data.peerUserId === user.id) {
+        socket.emit(CHAT_EVENTS.error, {
+          error: "Nie możesz napisać do siebie.",
+        });
+        return;
+      }
+
+      const peer = await prisma.user.findFirst({
+        where: { id: parsed.data.peerUserId, isActive: true },
+        select: { id: true },
+      });
+
+      if (!peer) {
+        socket.emit(CHAT_EVENTS.error, {
+          error: "Nie znaleziono rozmówcy.",
+        });
+        return;
+      }
+
+      try {
+        const pair = pairDirectUserIds(user.id, peer.id);
+        const conversation = await prisma.directConversation.upsert({
+          where: { userLowId_userHighId: pair },
+          create: pair,
+          update: { updatedAt: new Date() },
+          select: { id: true, userLowId: true, userHighId: true },
+        });
+
+        const message = await prisma.directMessage.create({
+          data: {
+            content: parsed.data.content,
+            authorId: user.id,
+            conversationId: conversation.id,
+            attachments:
+              parsed.data.attachments.length > 0
+                ? {
+                    create: parsed.data.attachments.map((attachment) => ({
+                      fileName: attachment.fileName,
+                      originalName: attachment.originalName,
+                      mimeType: attachment.mimeType,
+                      size: attachment.size,
+                      url: attachment.url,
+                    })),
+                  }
+                : undefined,
+          },
+          include: {
+            author: { select: { id: true, name: true, avatarUrl: true } },
+            attachments: { orderBy: { createdAt: "asc" } },
+          },
+        });
+
+        await prisma.directConversation.update({
+          where: { id: conversation.id },
+          data: { updatedAt: new Date() },
+        });
+
+        const dto = toDirectMessageDto(message);
+        io.to(chatUserRoom(conversation.userLowId))
+          .to(chatUserRoom(conversation.userHighId))
+          .emit(CHAT_EVENTS.dmMessage, dto);
+      } catch (error) {
+        console.error("[chat] zapis DM nie powiódł się", error);
         socket.emit(CHAT_EVENTS.error, {
           error: "Nie udało się zapisać wiadomości.",
         });

@@ -29,7 +29,40 @@ export async function ensureChatTeamReads(userId: string) {
   });
 }
 
-export async function countUnreadChatMessages(userId: string) {
+export async function ensureDirectConversationReads(userId: string) {
+  const conversations = await prisma.directConversation.findMany({
+    where: {
+      OR: [{ userLowId: userId }, { userHighId: userId }],
+    },
+    select: { id: true },
+  });
+
+  if (conversations.length === 0) {
+    return;
+  }
+
+  const existing = await prisma.directConversationRead.findMany({
+    where: { userId },
+    select: { conversationId: true },
+  });
+  const known = new Set(existing.map((row) => row.conversationId));
+  const missing = conversations.filter((row) => !known.has(row.id));
+
+  if (missing.length === 0) {
+    return;
+  }
+
+  const now = new Date();
+  await prisma.directConversationRead.createMany({
+    data: missing.map((row) => ({
+      userId,
+      conversationId: row.id,
+      lastReadAt: now,
+    })),
+  });
+}
+
+async function countUnreadTeamMessages(userId: string) {
   await ensureChatTeamReads(userId);
 
   const reads = await prisma.chatTeamRead.findMany({
@@ -56,6 +89,42 @@ export async function countUnreadChatMessages(userId: string) {
   return counts.reduce((sum, value) => sum + value, 0);
 }
 
+async function countUnreadDirectMessages(userId: string) {
+  await ensureDirectConversationReads(userId);
+
+  const reads = await prisma.directConversationRead.findMany({
+    where: { userId },
+    select: { conversationId: true, lastReadAt: true },
+  });
+
+  if (reads.length === 0) {
+    return 0;
+  }
+
+  const counts = await Promise.all(
+    reads.map((row) =>
+      prisma.directMessage.count({
+        where: {
+          conversationId: row.conversationId,
+          authorId: { not: userId },
+          createdAt: { gt: row.lastReadAt },
+        },
+      }),
+    ),
+  );
+
+  return counts.reduce((sum, value) => sum + value, 0);
+}
+
+export async function countUnreadChatMessages(userId: string) {
+  const [teamUnread, dmUnread] = await Promise.all([
+    countUnreadTeamMessages(userId),
+    countUnreadDirectMessages(userId),
+  ]);
+
+  return teamUnread + dmUnread;
+}
+
 export async function markChatTeamRead(userId: string, teamId: string) {
   const now = new Date();
 
@@ -66,6 +135,27 @@ export async function markChatTeamRead(userId: string, teamId: string) {
     create: {
       userId,
       teamId,
+      lastReadAt: now,
+    },
+    update: {
+      lastReadAt: now,
+    },
+  });
+}
+
+export async function markDirectConversationRead(
+  userId: string,
+  conversationId: string,
+) {
+  const now = new Date();
+
+  await prisma.directConversationRead.upsert({
+    where: {
+      userId_conversationId: { userId, conversationId },
+    },
+    create: {
+      userId,
+      conversationId,
       lastReadAt: now,
     },
     update: {

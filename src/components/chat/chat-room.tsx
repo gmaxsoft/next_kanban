@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { io, type Socket } from "socket.io-client";
-import { Paperclip, Send, X } from "lucide-react";
+import { ArrowLeft, Paperclip, Send, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { ChatAttachments } from "@/components/chat/chat-attachments";
@@ -20,6 +21,8 @@ import {
   type ChatMessageDto,
   type ChatPresencePayload,
   type ChatTeamOption,
+  type DirectMessageDto,
+  type DirectPeer,
 } from "@/lib/chat";
 import {
   CHAT_UPLOAD_MAX_FILES,
@@ -31,6 +34,14 @@ import { cn } from "@/lib/utils";
 
 const selectClassName =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+
+type ThreadMessage = {
+  id: string;
+  content: string;
+  createdAt: string;
+  author: ChatMessageDto["author"];
+  attachments: ChatMessageDto["attachments"];
+};
 
 function socketUrl() {
   return process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:3001";
@@ -49,14 +60,23 @@ export function ChatRoom({
   teams,
   members,
   initialMessages,
+  mode = "team",
+  peer = null,
+  conversationId = null,
+  recentPeers = [],
 }: {
   currentUserId: string;
   teamId: string;
   teams: ChatTeamOption[];
   members: ChatMember[];
-  initialMessages: ChatMessageDto[];
+  initialMessages: ThreadMessage[];
+  mode?: "team" | "dm";
+  peer?: ChatMember | null;
+  conversationId?: string | null;
+  recentPeers?: DirectPeer[];
 }) {
   const router = useRouter();
+  const isDm = mode === "dm" && peer;
   const [messages, setMessages] = useState(initialMessages);
   const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
@@ -72,7 +92,7 @@ export function ChatRoom({
 
   useEffect(() => {
     setMessages(initialMessages);
-  }, [initialMessages, teamId]);
+  }, [initialMessages, teamId, conversationId, peer?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +138,25 @@ export function ChatRoom({
       });
 
       socket.on(CHAT_EVENTS.message, (message: ChatMessageDto) => {
-        if (message.teamId !== teamId) {
+        if (isDm || message.teamId !== teamId) {
+          return;
+        }
+
+        setMessages((current) => {
+          if (current.some((item) => item.id === message.id)) {
+            return current;
+          }
+
+          return [...current, message];
+        });
+      });
+
+      socket.on(CHAT_EVENTS.dmMessage, (message: DirectMessageDto) => {
+        if (!isDm || !conversationId) {
+          return;
+        }
+
+        if (message.conversationId !== conversationId) {
           return;
         }
 
@@ -153,7 +191,7 @@ export function ChatRoom({
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
-  }, [teamId]);
+  }, [teamId, isDm, peer, conversationId, currentUserId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -240,11 +278,20 @@ export function ChatRoom({
       return;
     }
 
-    socketRef.current.emit(CHAT_EVENTS.send, {
-      teamId,
-      content,
-      attachments: pendingFiles,
-    });
+    if (isDm && peer) {
+      socketRef.current.emit(CHAT_EVENTS.dmSend, {
+        peerUserId: peer.id,
+        content,
+        attachments: pendingFiles,
+      });
+    } else {
+      socketRef.current.emit(CHAT_EVENTS.send, {
+        teamId,
+        content,
+        attachments: pendingFiles,
+      });
+    }
+
     setDraft("");
     setPendingFiles([]);
     setError(null);
@@ -258,34 +305,71 @@ export function ChatRoom({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden border bg-card shadow-sm lg:flex-row">
-      <ChatReadMarker teamId={teamId} messageCount={messages.length} />
+      <ChatReadMarker
+        teamId={isDm ? undefined : teamId}
+        conversationId={isDm ? (conversationId ?? undefined) : undefined}
+        messageCount={messages.length}
+      />
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
           <div className="space-y-2">
-            <div>
-              <h2 className="text-sm font-semibold">
-                Czat · {activeTeam?.name ?? "Zespół"}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Wybierz zespół, żeby rozmawiać z jego członkami.
-              </p>
-            </div>
-            <label className="grid gap-1 text-xs text-muted-foreground">
-              Aktywny zespół
-              <select
-                className={selectClassName}
-                value={teamId}
-                onChange={(event) => {
-                  router.replace(`/chat?team=${event.target.value}`);
-                }}
-              >
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {isDm && peer ? (
+              <div className="space-y-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-0"
+                  render={<Link href={`/chat?team=${teamId}`} />}
+                >
+                  <ArrowLeft />
+                  Czat zespołu
+                </Button>
+                <div className="flex items-center gap-2">
+                  <Avatar size="sm" className="size-8">
+                    <AvatarImage
+                      src={peer.avatarUrl ?? undefined}
+                      alt={peer.name}
+                    />
+                    <AvatarFallback className="text-[10px]">
+                      {getInitials(peer.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h2 className="text-sm font-semibold">{peer.name}</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Rozmowa prywatna (1:1)
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div>
+                  <h2 className="text-sm font-semibold">
+                    Czat · {activeTeam?.name ?? "Zespół"}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Kanał zespołu — kliknij osobę po prawej, aby napisać prywatnie.
+                  </p>
+                </div>
+                <label className="grid gap-1 text-xs text-muted-foreground">
+                  Aktywny zespół
+                  <select
+                    className={selectClassName}
+                    value={teamId}
+                    onChange={(event) => {
+                      router.replace(`/chat?team=${event.target.value}`);
+                    }}
+                  >
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
           </div>
           <span
             className={cn(
@@ -308,7 +392,9 @@ export function ChatRoom({
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           {messages.length === 0 ? (
             <p className="m-auto text-sm text-muted-foreground">
-              Brak wiadomości w tym zespole. Napisz pierwszą.
+              {isDm
+                ? `Brak wiadomości z ${peer?.name ?? "rozmówcą"}. Napisz pierwszą.`
+                : "Brak wiadomości w tym zespole. Napisz pierwszą."}
             </p>
           ) : (
             messages.map((message) => {
@@ -406,7 +492,11 @@ export function ChatRoom({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                disabled={!connected || uploading || pendingFiles.length >= CHAT_UPLOAD_MAX_FILES}
+                disabled={
+                  !connected ||
+                  uploading ||
+                  pendingFiles.length >= CHAT_UPLOAD_MAX_FILES
+                }
                 aria-label="Dodaj załącznik"
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -433,7 +523,9 @@ export function ChatRoom({
               }}
               placeholder={
                 connected
-                  ? "Napisz wiadomość… (emoji, Enter wyśle)"
+                  ? isDm
+                    ? `Napisz do ${peer?.name ?? "rozmówcy"}…`
+                    : "Napisz wiadomość… (emoji, Enter wyśle)"
                   : "Czat jest offline"
               }
               maxLength={2000}
@@ -455,6 +547,9 @@ export function ChatRoom({
         currentUserId={currentUserId}
         connected={connected}
         teamName={activeTeam?.name}
+        teamId={teamId}
+        activePeerUserId={peer?.id}
+        recentPeers={recentPeers}
       />
 
       <ConfirmDeleteDialog

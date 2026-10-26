@@ -94,6 +94,10 @@ model User {
   comments             Comment[]
   chatMessages         ChatMessage[]
   chatTeamReads        ChatTeamRead[]
+  directMessages       DirectMessage[]
+  directConversationReads DirectConversationRead[]
+  dmConversationsLow   DirectConversation[] @relation("DmUserLow")
+  dmConversationsHigh  DirectConversation[] @relation("DmUserHigh")
   notifications        Notification[]
   ticketMessages       TicketMessage[]
   taskAttachments      TaskAttachment[] @relation("TaskAttachmentUploader")
@@ -333,6 +337,71 @@ model ChatAttachment {
   createdAt    DateTime @default(now())
 
   message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+/// 1:1 direct message thread. Participants stored as sorted user ids.
+model DirectConversation {
+  id         String   @id @default(uuid()) @db.Char(36)
+  userLowId  String   @db.Char(36)
+  userHighId String   @db.Char(36)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  userLow  User @relation("DmUserLow", fields: [userLowId], references: [id], onDelete: Cascade)
+  userHigh User @relation("DmUserHigh", fields: [userHighId], references: [id], onDelete: Cascade)
+  messages DirectMessage[]
+  reads    DirectConversationRead[]
+
+  @@unique([userLowId, userHighId])
+  @@index([userLowId])
+  @@index([userHighId])
+}
+
+model DirectMessage {
+  id             String   @id @default(uuid()) @db.Char(36)
+  content        String   @db.Text
+  authorId       String   @db.Char(36)
+  conversationId String   @db.Char(36)
+  createdAt      DateTime @default(now())
+
+  author       User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  conversation DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments  DirectAttachment[]
+
+  @@index([createdAt])
+  @@index([authorId])
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
+}
+
+model DirectConversationRead {
+  id             String   @id @default(uuid()) @db.Char(36)
+  userId         String   @db.Char(36)
+  conversationId String   @db.Char(36)
+  lastReadAt     DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conversationId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model DirectAttachment {
+  id           String   @id @default(uuid()) @db.Char(36)
+  messageId    String   @db.Char(36)
+  fileName     String
+  originalName String
+  mimeType     String
+  size         Int
+  url          String
+  createdAt    DateTime @default(now())
+
+  message DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
 }

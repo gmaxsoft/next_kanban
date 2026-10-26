@@ -15,21 +15,37 @@ const attachmentSchema = z.object({
     .regex(/^\/uploads\/chat\/[A-Za-z0-9._-]+$/, "Nieprawidłowy URL załącznika"),
 });
 
+const messageBodySchema = {
+  content: z
+    .string()
+    .max(2000, "Wiadomość może mieć maksymalnie 2000 znaków")
+    .transform((value) => value.trim()),
+  attachments: z.array(attachmentSchema).max(CHAT_UPLOAD_MAX_FILES).default([]),
+} as const;
+
+function requireContentOrAttachment(
+  value: { content: string; attachments: unknown[] },
+  ctx: z.RefinementCtx,
+) {
+  if (!value.content && value.attachments.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Dodaj treść albo załącznik.",
+      path: ["content"],
+    });
+  }
+}
+
 export const chatMessageSchema = z
   .object({
     teamId: z.string().uuid("Wybierz zespół"),
-    content: z
-      .string()
-      .max(2000, "Wiadomość może mieć maksymalnie 2000 znaków")
-      .transform((value) => value.trim()),
-    attachments: z.array(attachmentSchema).max(CHAT_UPLOAD_MAX_FILES).default([]),
+    ...messageBodySchema,
   })
-  .superRefine((value, ctx) => {
-    if (!value.content && value.attachments.length === 0) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Dodaj treść albo załącznik.",
-        path: ["content"],
-      });
-    }
-  });
+  .superRefine(requireContentOrAttachment);
+
+export const directMessageSchema = z
+  .object({
+    peerUserId: z.string().uuid("Wybierz rozmówcę"),
+    ...messageBodySchema,
+  })
+  .superRefine(requireContentOrAttachment);

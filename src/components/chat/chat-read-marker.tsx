@@ -2,28 +2,37 @@
 
 import { useEffect } from "react";
 
-import { markChatTeamAsRead } from "@/app/actions/chat";
+import {
+  markChatTeamAsRead,
+  markDirectConversationAsRead,
+} from "@/app/actions/chat";
 import { useChatSocket } from "@/components/chat/chat-socket-provider";
 
-/** Marks the active chat team as read and syncs the sidebar badge. */
+/** Marks the active chat thread as read and syncs the sidebar badge. */
 export function ChatReadMarker({
   teamId,
+  conversationId,
   messageCount,
 }: {
-  teamId: string;
-  /** Bumps when new messages arrive while viewing this team. */
+  teamId?: string;
+  conversationId?: string;
+  /** Bumps when new messages arrive while viewing this thread. */
   messageCount: number;
 }) {
   const { setUnreadCount } = useChatSocket();
 
   useEffect(() => {
-    if (!teamId) {
+    if (!teamId && !conversationId) {
       return;
     }
 
     let cancelled = false;
 
-    void markChatTeamAsRead(teamId).then((result) => {
+    const action = conversationId
+      ? markDirectConversationAsRead(conversationId)
+      : markChatTeamAsRead(teamId!);
+
+    void action.then((result) => {
       if (cancelled || result.error || result.unreadCount === undefined) {
         return;
       }
@@ -34,7 +43,7 @@ export function ChatReadMarker({
     return () => {
       cancelled = true;
     };
-  }, [teamId, messageCount, setUnreadCount]);
+  }, [teamId, conversationId, messageCount, setUnreadCount]);
 
   return null;
 }
