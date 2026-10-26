@@ -86,7 +86,7 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
         isActive: true,
         ...(!isAdmin && ticket.teamId ? { teamId: ticket.teamId } : {}),
       },
-      select: { id: true, name: true, teamId: true },
+      select: { id: true, name: true, email: true, teamId: true },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -125,7 +125,7 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
           </div>
           <p className="text-lg font-medium">{ticket.subject}</p>
           <p className="text-sm text-muted-foreground">
-            <span className="font-medium">Od kogo:</span>{" "}
+            <span className="font-medium">Zgłaszający:</span>{" "}
             {ticket.requestedBy ?? ticket.requesterName ?? ticket.requesterEmail}
             {ticket.requesterEmail !== ticket.requestedBy
               ? ` · ${ticket.requesterEmail}`
@@ -156,6 +156,7 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
             assigneeId={ticket.assigneeId}
             watcherIds={ticket.watchers.map((watcher) => watcher.userId)}
             requestedBy={ticket.requestedBy ?? ticket.requesterName ?? ticket.requesterEmail}
+            requesterEmail={ticket.requesterEmail}
             members={members}
           />
         </CardContent>

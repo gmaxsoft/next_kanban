@@ -125,7 +125,7 @@ export function TicketsDataTable({
         }),
         columnHelper.accessor("requesterDisplay", {
           header: ({ column }) => (
-            <DataTableColumnHeader column={column} title="Od kogo" />
+            <DataTableColumnHeader column={column} title="Zgłaszający" />
           ),
           cell: ({ row }) => (
             <div className="grid">

@@ -69,6 +69,74 @@ export function parseEmailAddress(raw: string): { email: string; name: string | 
   return { email: trimmed.toLowerCase(), name: null };
 }
 
+const EMAIL_IN_TEXT =
+  /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+
+export function extractEmailFromText(value: string): string | null {
+  const match = value.match(EMAIL_IN_TEXT);
+  return match ? match[0].toLowerCase() : null;
+}
+
+/**
+ * Reply destination for ticket correspondence.
+ * Prefer the person set as Zgłaszający (requestedBy), not the original inbound sender.
+ */
+export async function resolveTicketReplyRecipient(ticket: {
+  requesterEmail: string;
+  requesterName: string | null;
+  requestedBy: string | null;
+  teamId: string | null;
+}): Promise<{ toEmail: string; requesterName: string | null }> {
+  const requestedBy = ticket.requestedBy?.trim() ?? "";
+
+  const emailFromField = extractEmailFromText(requestedBy);
+  if (emailFromField) {
+    const name = requestedBy
+      .replace(EMAIL_IN_TEXT, "")
+      .replace(/[<>]/g, "")
+      .trim();
+    return {
+      toEmail: emailFromField,
+      requesterName: name || ticket.requesterName,
+    };
+  }
+
+  if (requestedBy) {
+    const byName = await prisma.user.findFirst({
+      where: {
+        isActive: true,
+        name: requestedBy,
+        ...(ticket.teamId ? { teamId: ticket.teamId } : {}),
+      },
+      select: { email: true, name: true },
+    });
+
+    if (byName) {
+      return { toEmail: byName.email, requesterName: byName.name };
+    }
+
+    const byNameAnyTeam = ticket.teamId
+      ? await prisma.user.findFirst({
+          where: { isActive: true, name: requestedBy },
+          select: { email: true, name: true },
+        })
+      : null;
+
+    if (byNameAnyTeam) {
+      return {
+        toEmail: byNameAnyTeam.email,
+        requesterName: byNameAnyTeam.name,
+      };
+    }
+  }
+
+  return {
+    toEmail: ticket.requesterEmail,
+    requesterName:
+      requestedBy || ticket.requesterName || ticket.requesterEmail,
+  };
+}
+
 export async function findTeamByInboundAddress(addresses: string[]) {
   const normalized = addresses
     .map((value) => parseEmailAddress(value).email)

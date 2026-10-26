@@ -5,15 +5,26 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { requireAdmin, requireAuth } from "@/lib/auth-utils";
-import { sendTeamNotificationEmail, sendTicketReplyEmail, ticketUrl } from "@/lib/mail";
+import {
+  absoluteAppUrl,
+  sendTeamNotificationEmail,
+  sendTicketReplyEmail,
+  sendTicketStatusChangedEmail,
+  ticketUrl,
+} from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
 import { normalizeRichTextInput } from "@/lib/rich-text";
 import { notifyTicketParticipants } from "@/lib/ticket-notifications";
 import { extractMentionedUserIds } from "@/lib/mentions";
 import { createNotifications } from "@/lib/notifications";
 import {
+  ticketPriorityLabel,
+  ticketStatusLabel,
+} from "@/lib/ticket-labels";
+import {
   findTodoColumn,
   formatTicketId,
+  resolveTicketReplyRecipient,
   ticketSubjectWithRef,
 } from "@/lib/tickets";
 import { firstZodError } from "@/lib/validations/auth";
@@ -94,7 +105,7 @@ export async function updateTicketPriority(
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
-    select: { id: true, teamId: true },
+    select: { id: true, teamId: true, number: true, subject: true },
   });
   if (!ticket) {
     return { error: "Nie znaleziono ticketu." };
@@ -103,6 +114,9 @@ export async function updateTicketPriority(
     return { error: "Nie masz dostępu do tego ticketu." };
   }
 
+  const priorityLabel = ticketPriorityLabel(priority.data);
+  const displayId = formatTicketId(ticket.number);
+
   await prisma.ticket.update({
     where: { id: ticketId },
     data: { priority: priority.data },
@@ -110,8 +124,8 @@ export async function updateTicketPriority(
   await notifyTicketParticipants({
     ticketId,
     actorId: session.user.id,
-    title: "Zmieniono priorytet ticketu",
-    body: `Nowy priorytet: ${priority.data}.`,
+    title: `Priorytet ${displayId}: ${priorityLabel}`,
+    body: `Zgłoszenie ${displayId} („${ticket.subject}”) ma teraz priorytet: ${priorityLabel}.`,
   });
 
   revalidatePath("/tickets");
@@ -134,7 +148,16 @@ export async function updateTicketStatus(
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
-    select: { id: true, teamId: true },
+    include: {
+      team: {
+        select: {
+          inboundEmail: true,
+          imapHost: true,
+          imapUser: true,
+          imapPassword: true,
+        },
+      },
+    },
   });
   if (!ticket) {
     return { error: "Nie znaleziono ticketu." };
@@ -142,6 +165,9 @@ export async function updateTicketStatus(
   if (!session.user.isAdmin && ticket.teamId !== session.user.teamId) {
     return { error: "Nie masz dostępu do tego ticketu." };
   }
+
+  const statusLabel = ticketStatusLabel(status.data);
+  const displayId = formatTicketId(ticket.number);
 
   await prisma.ticket.update({
     where: { id: ticketId },
@@ -151,12 +177,39 @@ export async function updateTicketStatus(
       statusLocked: true,
     },
   });
+
   await notifyTicketParticipants({
     ticketId,
     actorId: session.user.id,
-    title: "Zmieniono status ticketu",
-    body: `Nowy status: ${status.data}.`,
+    title: `Status ${displayId}: ${statusLabel}`,
+    body: `Zgłoszenie ${displayId} („${ticket.subject}”) zmieniło status na: ${statusLabel}.`,
   });
+
+  const team = ticket.team;
+  if (
+    team?.inboundEmail &&
+    team.imapHost?.startsWith("imap.") &&
+    team.imapUser &&
+    team.imapPassword
+  ) {
+    try {
+      const recipient = await resolveTicketReplyRecipient(ticket);
+      await sendTicketStatusChangedEmail({
+        toEmail: recipient.toEmail,
+        requesterName: recipient.requesterName,
+        displayId,
+        subject: ticket.subject,
+        statusLabel,
+        ticketId: ticket.id,
+        inboundEmail: team.inboundEmail,
+        smtpHost: team.imapHost.replace(/^imap\./i, "smtp."),
+        smtpUser: team.imapUser,
+        smtpPassword: team.imapPassword,
+      });
+    } catch (error) {
+      console.error("[tickets] status email to requester failed", error);
+    }
+  }
 
   revalidatePath("/tickets");
   revalidatePath(`/tickets/${ticketId}`);
@@ -204,7 +257,15 @@ export async function updateTicketAssignee(
   const session = await requireAuth();
   const ticketId = String(formData.get("ticketId") ?? "");
   const assigneeId = String(formData.get("assigneeId") ?? "").trim() || null;
-  const requestedBy = String(formData.get("requestedBy") ?? "").trim().slice(0, 255);
+  const requesterUserId =
+    String(formData.get("requesterUserId") ?? "").trim() || null;
+  const requestedByRaw = String(formData.get("requestedBy") ?? "")
+    .trim()
+    .slice(0, 255);
+  const requesterEmailRaw = String(formData.get("requesterEmail") ?? "")
+    .trim()
+    .toLowerCase()
+    .slice(0, 255);
   const watcherIds = [...new Set(formData.getAll("watcherIds").map(String).filter(Boolean))];
 
   if (!ticketId) {
@@ -213,7 +274,13 @@ export async function updateTicketAssignee(
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
-    select: { id: true, teamId: true },
+    select: {
+      id: true,
+      teamId: true,
+      requesterEmail: true,
+      requesterName: true,
+      requestedBy: true,
+    },
   });
   if (!ticket) {
     return { error: "Nie znaleziono ticketu." };
@@ -222,7 +289,13 @@ export async function updateTicketAssignee(
     return { error: "Nie masz dostępu do tego ticketu." };
   }
 
-  const requestedIds = [...new Set([...watcherIds, ...(assigneeId ? [assigneeId] : [])])];
+  const requestedIds = [
+    ...new Set([
+      ...watcherIds,
+      ...(assigneeId ? [assigneeId] : []),
+      ...(requesterUserId ? [requesterUserId] : []),
+    ]),
+  ];
   const people = requestedIds.length
     ? await prisma.user.findMany({
         where: {
@@ -230,15 +303,58 @@ export async function updateTicketAssignee(
           isActive: true,
           ...(ticket.teamId ? { teamId: ticket.teamId } : {}),
         },
-        select: { id: true },
+        select: { id: true, name: true, email: true },
       })
     : [];
   if (people.length !== requestedIds.length) {
     return { error: "Wybierz aktywne osoby z zespołu ticketu." };
   }
 
+  const requesterUser = requesterUserId
+    ? people.find((person) => person.id === requesterUserId)
+    : null;
+
+  let requestedBy = requestedByRaw;
+  let requesterEmail = ticket.requesterEmail;
+  let requesterName = ticket.requesterName;
+
+  if (requesterUser) {
+    requestedBy = requesterUser.name;
+    requesterEmail = requesterUser.email;
+    requesterName = requesterUser.name;
+  } else {
+    if (!requestedBy) {
+      return { error: "Podaj zgłaszającego." };
+    }
+
+    if (requesterEmailRaw) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requesterEmailRaw)) {
+        return { error: "Podaj poprawny e-mail zgłaszającego." };
+      }
+      requesterEmail = requesterEmailRaw;
+      requesterName = requestedBy;
+    } else {
+      const resolved = await resolveTicketReplyRecipient({
+        requesterEmail: ticket.requesterEmail,
+        requesterName: ticket.requesterName,
+        requestedBy,
+        teamId: ticket.teamId,
+      });
+      requesterEmail = resolved.toEmail;
+      requesterName = resolved.requesterName;
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
-    await tx.ticket.update({ where: { id: ticketId }, data: { assigneeId, requestedBy } });
+    await tx.ticket.update({
+      where: { id: ticketId },
+      data: {
+        assigneeId,
+        requestedBy: requestedBy || null,
+        requesterEmail,
+        requesterName,
+      },
+    });
     await tx.ticketWatcher.deleteMany({ where: { ticketId } });
     if (watcherIds.length) {
       await tx.ticketWatcher.createMany({
@@ -247,11 +363,23 @@ export async function updateTicketAssignee(
     }
   });
 
+  const assigneeName = assigneeId
+    ? people.find((person) => person.id === assigneeId)?.name
+    : null;
+
   await notifyTicketParticipants({
     ticketId,
     actorId: session.user.id,
-    title: "Zmieniono osoby przy ticketcie",
-    body: "Zapisano osobę odpowiedzialną i obserwujących ticket.",
+    title: "Zaktualizowano osoby w zgłoszeniu",
+    body: [
+      `Zgłaszający: ${requestedBy}.`,
+      assigneeName
+        ? `Odpowiedzialny: ${assigneeName}.`
+        : "Odpowiedzialny: nieprzypisany.",
+      watcherIds.length
+        ? `Obserwujący: ${watcherIds.length}.`
+        : "Brak obserwujących.",
+    ].join(" "),
   });
 
   revalidatePath("/tickets");
@@ -330,11 +458,13 @@ export async function addTicketInternalNote(
     data: { lastMessageAt: new Date() },
   });
 
+  const displayId = formatTicketId(ticket.number);
+
   await notifyTicketParticipants({
     ticketId,
     actorId: session.user.id,
-    title: "Dodano notatkę do ticketu",
-    body: `${session.user.name ?? "Członek zespołu"} dodał(a) notatkę wewnętrzną.`,
+    title: `Nowa notatka · ${displayId}`,
+    body: `${session.user.name ?? "Członek zespołu"} dodał(a) notatkę wewnętrzną w zgłoszeniu ${displayId} („${ticket.subject}”).`,
   });
 
   const participantIds = new Set([
@@ -354,8 +484,8 @@ export async function addTicketInternalNote(
     await createNotifications(
       mentionOnlyMembers.map((member) => member.id),
       {
-        title: "Wspomniano Cie w notatce ticketu",
-        body: `${session.user.name ?? "Czlonek zespolu"}: ${body.slice(0, 120)}`,
+        title: `Wspomniano Cię · ${displayId}`,
+        body: `${session.user.name ?? "Członek zespołu"}: ${body.slice(0, 120)}`,
         href,
       },
     );
@@ -373,12 +503,17 @@ export async function addTicketInternalNote(
       mentionOnlyMembers.map((member) =>
         sendTeamNotificationEmail({
           toEmail: member.email,
+          recipientName: member.name,
           inboundEmail: team.inboundEmail!,
           smtpHost: team.imapHost!.replace(/^imap\./i, "smtp."),
           smtpUser: team.imapUser!,
           smtpPassword: team.imapPassword!,
-          subject: `Wspomniano Cie w tickecie ${formatTicketId(ticket.number)}`,
-          body: `${session.user.name ?? "Czlonek zespolu"} wspomnial(a) Cie w notatce ticketu ${formatTicketId(ticket.number)}: ${ticket.subject}\n\n${body.slice(0, 500)}\n\nTicket w Next Kanban: ${href}`,
+          subject: `Wspomniano Cię w zgłoszeniu ${formatTicketId(ticket.number)}`,
+          body: `${session.user.name ?? "Członek zespołu"} wspomniał(a) Cię w notatce zgłoszenia ${formatTicketId(ticket.number)} („${ticket.subject}”):\n\n${body.slice(0, 500)}`,
+          actionUrl: absoluteAppUrl(href),
+          actionLabel: "Otwórz zgłoszenie",
+          ticketDisplayId: formatTicketId(ticket.number),
+          ticketSubject: ticket.subject,
         }),
       ),
     );
@@ -480,14 +615,16 @@ export async function replyToTicket(
   }
 
   const subject = ticketSubjectWithRef(ticket.number, ticket.subject);
+  const recipient = await resolveTicketReplyRecipient(ticket);
+  const displayId = formatTicketId(ticket.number);
 
   try {
     await sendTicketReplyEmail({
-      toEmail: ticket.requesterEmail,
-      requesterName: ticket.requesterName,
-      agentName: session.user.name ?? "Zespół IT",
+      toEmail: recipient.toEmail,
+      requesterName: recipient.requesterName,
+      agentName: session.user.name ?? "HelpDesk",
       ticketId: ticket.id,
-      displayId: formatTicketId(ticket.number),
+      displayId,
       subject,
       body,
       inboundEmail: ticket.team.inboundEmail,
@@ -505,7 +642,7 @@ export async function replyToTicket(
       ticketId,
       kind: "OUTBOUND",
       fromEmail: ticket.team.inboundEmail,
-      fromName: session.user.name ?? "Zespół IT",
+      fromName: session.user.name ?? "HelpDesk",
       subject,
       bodyText: body.slice(0, 10000),
       authorId: session.user.id,
@@ -530,8 +667,8 @@ export async function replyToTicket(
   await notifyTicketParticipants({
     ticketId,
     actorId: session.user.id,
-    title: "Wysłano odpowiedź do klienta",
-    body: `${session.user.name ?? "Członek zespołu"} odpowiedział(a) na ticket ${formatTicketId(ticket.number)}.`,
+    title: `Wysłano odpowiedź · ${displayId}`,
+    body: `${session.user.name ?? "Członek zespołu"} wysłał(a) odpowiedź e-mail do zgłaszającego w zgłoszeniu ${displayId} („${ticket.subject}”).`,
   });
 
   revalidatePath("/tickets");

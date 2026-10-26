@@ -1,15 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import type { TicketStatus } from "@prisma/client";
 
 import {
   updateTicketStatus,
   type TicketActionState,
 } from "@/app/actions/tickets";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { cn } from "@/lib/utils";
+
+const selectClassName =
+  "h-8 min-w-44 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
 export function TicketStatusForm({
   ticketId,
@@ -18,31 +21,43 @@ export function TicketStatusForm({
   ticketId: string;
   status: TicketStatus;
 }) {
-  const [state, formAction, pending] = useActionState<
+  const [value, setValue] = useState(status);
+  const [state, formAction, actionPending] = useActionState<
     TicketActionState,
     FormData
   >(updateTicketStatus, null);
+  const [isPending, startTransition] = useTransition();
   useActionToast(state);
 
+  const pending = actionPending || isPending;
+
+  useEffect(() => {
+    setValue(status);
+  }, [status]);
+
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-3">
-      <input type="hidden" name="ticketId" value={ticketId} />
-      <div className="grid gap-2">
-        <Label htmlFor="ticket-status">Status</Label>
-        <select
-          id="ticket-status"
-          name="status"
-          defaultValue={status}
-          className="h-8 min-w-44 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-        >
-          <option value="OPEN">Otwarte</option>
-          <option value="IN_PROGRESS">W trakcie</option>
-          <option value="RESOLVED">Rozwiązane</option>
-        </select>
-      </div>
-      <Button type="submit" variant="secondary" disabled={pending}>
-        {pending ? "Zapisywanie..." : "Zmień status"}
-      </Button>
-    </form>
+    <div className="grid gap-2">
+      <Label htmlFor="ticket-status">Status</Label>
+      <select
+        id="ticket-status"
+        value={value}
+        disabled={pending}
+        className={cn(selectClassName, pending && "opacity-60")}
+        onChange={(event) => {
+          const next = event.target.value as TicketStatus;
+          setValue(next);
+          const fd = new FormData();
+          fd.set("ticketId", ticketId);
+          fd.set("status", next);
+          startTransition(() => {
+            formAction(fd);
+          });
+        }}
+      >
+        <option value="OPEN">Otwarte</option>
+        <option value="IN_PROGRESS">W trakcie</option>
+        <option value="RESOLVED">Rozwiązane</option>
+      </select>
+    </div>
   );
 }

@@ -101,7 +101,7 @@ export function CreateTaskFromTicketForm({
         <input type="hidden" name="ticketId" value={ticketId} />
         <input type="hidden" name="teamId" value={teamId} />
         <div className="grid gap-2 sm:max-w-md">
-          <Label htmlFor="ticket-task-requested-by">Od kogo</Label>
+          <Label htmlFor="ticket-task-requested-by">Zgłaszający</Label>
           <input
             id="ticket-task-requested-by"
             name="requestedBy"
@@ -132,7 +132,7 @@ export function CreateTaskFromTicketForm({
           </select>
         </div>
         <div className="grid gap-2 sm:max-w-md">
-          <Label htmlFor="ticket-task-assignee">Osoba odpowiedzialna</Label>
+          <Label htmlFor="ticket-task-assignee">Odpowiedzialny</Label>
           <select
             id="ticket-task-assignee"
             name="assigneeId"
