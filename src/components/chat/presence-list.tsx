@@ -3,9 +3,21 @@
 import Link from "next/link";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { ChatMember, DirectPeer } from "@/lib/chat";
+import type { ChatMember, DirectPeer, DmUnreadByPeer } from "@/lib/chat";
 import { getInitials } from "@/lib/user";
 import { cn } from "@/lib/utils";
+
+function UnreadBadge({ count }: { count: number }) {
+  if (count <= 0) {
+    return null;
+  }
+
+  return (
+    <span className="ml-1 shrink-0 font-semibold text-destructive">
+      ({count > 99 ? "99+" : count})
+    </span>
+  );
+}
 
 export function PresenceList({
   members,
@@ -16,6 +28,7 @@ export function PresenceList({
   teamId,
   activePeerUserId,
   recentPeers = [],
+  dmUnreadByPeer = {},
 }: {
   members: ChatMember[];
   onlineUserIds: string[];
@@ -25,6 +38,7 @@ export function PresenceList({
   teamId: string;
   activePeerUserId?: string | null;
   recentPeers?: DirectPeer[];
+  dmUnreadByPeer?: DmUnreadByPeer;
 }) {
   const online = new Set(onlineUserIds);
 
@@ -35,9 +49,14 @@ export function PresenceList({
   }
 
   const sorted = [...members].sort((a, b) => {
+    const aUnread = dmUnreadByPeer[a.id] ?? 0;
+    const bUnread = dmUnreadByPeer[b.id] ?? 0;
+    if ((aUnread > 0) !== (bUnread > 0)) {
+      return aUnread > 0 ? -1 : 1;
+    }
+
     const aOnline = online.has(a.id) ? 0 : 1;
     const bOnline = online.has(b.id) ? 0 : 1;
-
     if (aOnline !== bOnline) {
       return aOnline - bOnline;
     }
@@ -45,7 +64,16 @@ export function PresenceList({
     return a.name.localeCompare(b.name, "pl");
   });
 
-  const recentOthers = recentPeers.filter((peer) => peer.id !== currentUserId);
+  const recentOthers = [...recentPeers]
+    .filter((peer) => peer.id !== currentUserId)
+    .sort((a, b) => {
+      const aUnread = dmUnreadByPeer[a.id] ?? a.unreadCount ?? 0;
+      const bUnread = dmUnreadByPeer[b.id] ?? b.unreadCount ?? 0;
+      if ((aUnread > 0) !== (bUnread > 0)) {
+        return aUnread > 0 ? -1 : 1;
+      }
+      return 0;
+    });
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-t bg-card lg:w-72 lg:border-t-0 lg:border-l">
@@ -67,6 +95,9 @@ export function PresenceList({
           <ul className="flex flex-col gap-0.5">
             {recentOthers.map((peer) => {
               const active = activePeerUserId === peer.id;
+              const unread = dmUnreadByPeer[peer.id] ?? peer.unreadCount ?? 0;
+              const needsReply = unread > 0;
+
               return (
                 <li key={peer.conversationId}>
                   <Link
@@ -85,7 +116,20 @@ export function PresenceList({
                         {getInitials(peer.name)}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="truncate text-sm">{peer.name}</span>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={cn(
+                          "truncate text-sm",
+                          needsReply ? "font-semibold" : "font-medium",
+                        )}
+                      >
+                        {peer.name}
+                        <UnreadBadge count={unread} />
+                      </p>
+                      {needsReply ? (
+                        <p className="text-xs text-destructive">odpisz DM</p>
+                      ) : null}
+                    </div>
                   </Link>
                 </li>
               );
@@ -99,6 +143,8 @@ export function PresenceList({
           const isOnline = online.has(member.id);
           const isSelf = member.id === currentUserId;
           const active = activePeerUserId === member.id;
+          const unread = dmUnreadByPeer[member.id] ?? 0;
+          const needsReply = !isSelf && unread > 0;
 
           const content = (
             <>
@@ -120,25 +166,33 @@ export function PresenceList({
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
+                <p
+                  className={cn(
+                    "truncate text-sm",
+                    needsReply ? "font-semibold" : "font-medium",
+                  )}
+                >
                   {member.name}
-                  {isSelf ? " (Ty)" : ""}
+                  {isSelf ? " (Ty)" : null}
+                  <UnreadBadge count={unread} />
                 </p>
                 <p
                   className={cn(
                     "text-xs",
-                    isOnline
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-muted-foreground",
+                    needsReply
+                      ? "text-destructive"
+                      : isOnline
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-muted-foreground",
                   )}
                 >
                   {isSelf
                     ? isOnline
                       ? "Online"
                       : "Offline"
-                    : isOnline
-                      ? "Online · napisz DM"
-                      : "Offline · napisz DM"}
+                    : needsReply
+                      ? `${isOnline ? "Online" : "Offline"} · odpisz DM`
+                      : `${isOnline ? "Online" : "Offline"} · napisz DM`}
                 </p>
               </div>
             </>
@@ -156,6 +210,7 @@ export function PresenceList({
                   className={cn(
                     "flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-muted/60",
                     active && "bg-muted",
+                    needsReply && !active && "bg-destructive/5",
                   )}
                 >
                   {content}

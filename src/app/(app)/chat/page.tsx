@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { ChatRoom } from "@/components/chat/chat-room";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireUnrestrictedAuth } from "@/lib/auth-utils";
 import {
   getOrCreateDirectConversation,
   listChatMembers,
@@ -12,6 +12,7 @@ import {
   listTeamsForChat,
 } from "@/lib/chat-data";
 import {
+  countUnreadDirectByPeer,
   markChatTeamRead,
   markDirectConversationRead,
 } from "@/lib/chat-unread";
@@ -33,7 +34,7 @@ function firstParam(value?: string | string[]) {
 }
 
 export default async function ChatPage({ searchParams }: ChatPageProps) {
-  const session = await requireAuth();
+  const session = await requireUnrestrictedAuth();
   const teams = await listTeamsForChat();
 
   if (teams.length === 0) {
@@ -75,12 +76,18 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
       redirect(`/chat?team=${preferredTeam}&dm=${requestedDm}`);
     }
 
-    const [messages, members, recentPeers] = await Promise.all([
+    // Mark read before counting so this peer shows 0 unread.
+    await markDirectConversationRead(session.user.id, dm.conversationId);
+
+    const [messages, members, unreadByPeer] = await Promise.all([
       listRecentDirectMessages(dm.conversationId),
       listChatMembers(preferredTeam),
-      listRecentDirectPeers(session.user.id),
-      markDirectConversationRead(session.user.id, dm.conversationId),
+      countUnreadDirectByPeer(session.user.id),
     ]);
+    const recentPeers = await listRecentDirectPeers(
+      session.user.id,
+      unreadByPeer,
+    );
 
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
@@ -103,6 +110,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
           peer={dm.peer}
           conversationId={dm.conversationId}
           recentPeers={recentPeers}
+          initialDmUnreadByPeer={unreadByPeer}
         />
       </div>
     );
@@ -112,12 +120,16 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
     redirect(`/chat?team=${preferredTeam}`);
   }
 
-  const [messages, members, recentPeers] = await Promise.all([
+  const [messages, members, unreadByPeer] = await Promise.all([
     listRecentChatMessages(preferredTeam),
     listChatMembers(preferredTeam),
-    listRecentDirectPeers(session.user.id),
+    countUnreadDirectByPeer(session.user.id),
     markChatTeamRead(session.user.id, preferredTeam),
   ]);
+  const recentPeers = await listRecentDirectPeers(
+    session.user.id,
+    unreadByPeer,
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
@@ -137,6 +149,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
         members={members}
         initialMessages={messages}
         recentPeers={recentPeers}
+        initialDmUnreadByPeer={unreadByPeer}
       />
     </div>
   );

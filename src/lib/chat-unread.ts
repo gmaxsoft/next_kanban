@@ -90,30 +90,61 @@ async function countUnreadTeamMessages(userId: string) {
 }
 
 async function countUnreadDirectMessages(userId: string) {
+  const byPeer = await countUnreadDirectByPeer(userId);
+  return Object.values(byPeer).reduce((sum, value) => sum + value, 0);
+}
+
+/** Unread DM counts keyed by the peer who sent them. */
+export async function countUnreadDirectByPeer(
+  userId: string,
+): Promise<Record<string, number>> {
   await ensureDirectConversationReads(userId);
 
-  const reads = await prisma.directConversationRead.findMany({
-    where: { userId },
-    select: { conversationId: true, lastReadAt: true },
+  const conversations = await prisma.directConversation.findMany({
+    where: {
+      OR: [{ userLowId: userId }, { userHighId: userId }],
+    },
+    select: {
+      id: true,
+      userLowId: true,
+      userHighId: true,
+      reads: {
+        where: { userId },
+        select: { lastReadAt: true },
+        take: 1,
+      },
+    },
   });
 
-  if (reads.length === 0) {
-    return 0;
+  if (conversations.length === 0) {
+    return {};
   }
 
-  const counts = await Promise.all(
-    reads.map((row) =>
-      prisma.directMessage.count({
+  const entries = await Promise.all(
+    conversations.map(async (conversation) => {
+      const peerId =
+        conversation.userLowId === userId
+          ? conversation.userHighId
+          : conversation.userLowId;
+      const lastReadAt = conversation.reads[0]?.lastReadAt ?? new Date(0);
+      const count = await prisma.directMessage.count({
         where: {
-          conversationId: row.conversationId,
-          authorId: { not: userId },
-          createdAt: { gt: row.lastReadAt },
+          conversationId: conversation.id,
+          authorId: peerId,
+          createdAt: { gt: lastReadAt },
         },
-      }),
-    ),
+      });
+      return [peerId, count] as const;
+    }),
   );
 
-  return counts.reduce((sum, value) => sum + value, 0);
+  const result: Record<string, number> = {};
+  for (const [peerId, count] of entries) {
+    if (count > 0) {
+      result[peerId] = count;
+    }
+  }
+  return result;
 }
 
 export async function countUnreadChatMessages(userId: string) {

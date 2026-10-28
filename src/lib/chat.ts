@@ -71,7 +71,11 @@ export type ChatMember = ChatAuthor;
 
 export type DirectPeer = ChatAuthor & {
   conversationId: string;
+  unreadCount?: number;
 };
+
+/** peerUserId → unread DM count from that peer */
+export type DmUnreadByPeer = Record<string, number>;
 
 type AttachmentRow = {
   id: string;

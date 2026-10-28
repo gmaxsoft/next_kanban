@@ -99,6 +99,7 @@ export async function listRecentDirectMessages(
 
 export async function listRecentDirectPeers(
   userId: string,
+  unreadByPeer: Record<string, number> = {},
 ): Promise<DirectPeer[]> {
   const conversations = await prisma.directConversation.findMany({
     where: {
@@ -117,29 +118,32 @@ export async function listRecentDirectPeers(
     },
   });
 
-  return conversations
-    .map((conversation) => {
-      if (conversation.messages.length === 0) {
-        return null;
-      }
+  const peers: DirectPeer[] = [];
 
-      const peer =
-        conversation.userLowId === userId
-          ? conversation.userHigh
-          : conversation.userLow;
+  for (const conversation of conversations) {
+    if (conversation.messages.length === 0) {
+      continue;
+    }
 
-      if (!peer.isActive) {
-        return null;
-      }
+    const peer =
+      conversation.userLowId === userId
+        ? conversation.userHigh
+        : conversation.userLow;
 
-      return {
-        id: peer.id,
-        name: peer.name,
-        avatarUrl: peer.avatarUrl,
-        conversationId: conversation.id,
-      } satisfies DirectPeer;
-    })
-    .filter((peer): peer is DirectPeer => peer !== null);
+    if (!peer.isActive) {
+      continue;
+    }
+
+    peers.push({
+      id: peer.id,
+      name: peer.name,
+      avatarUrl: peer.avatarUrl,
+      conversationId: conversation.id,
+      unreadCount: unreadByPeer[peer.id] ?? 0,
+    });
+  }
+
+  return peers;
 }
 
 export async function userIsConversationParticipant(

@@ -23,6 +23,7 @@ import {
   type ChatTeamOption,
   type DirectMessageDto,
   type DirectPeer,
+  type DmUnreadByPeer,
 } from "@/lib/chat";
 import {
   CHAT_UPLOAD_MAX_FILES,
@@ -64,6 +65,7 @@ export function ChatRoom({
   peer = null,
   conversationId = null,
   recentPeers = [],
+  initialDmUnreadByPeer = {},
 }: {
   currentUserId: string;
   teamId: string;
@@ -74,11 +76,15 @@ export function ChatRoom({
   peer?: ChatMember | null;
   conversationId?: string | null;
   recentPeers?: DirectPeer[];
+  initialDmUnreadByPeer?: DmUnreadByPeer;
 }) {
   const router = useRouter();
   const isDm = mode === "dm" && peer;
   const [messages, setMessages] = useState(initialMessages);
   const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
+  const [dmUnreadByPeer, setDmUnreadByPeer] = useState<DmUnreadByPeer>(
+    initialDmUnreadByPeer,
+  );
   const [connected, setConnected] = useState(false);
   const [draft, setDraft] = useState("");
   const [pendingFiles, setPendingFiles] = useState<StoredChatFile[]>([]);
@@ -93,6 +99,23 @@ export function ChatRoom({
   useEffect(() => {
     setMessages(initialMessages);
   }, [initialMessages, teamId, conversationId, peer?.id]);
+
+  useEffect(() => {
+    setDmUnreadByPeer(initialDmUnreadByPeer);
+  }, [initialDmUnreadByPeer]);
+
+  useEffect(() => {
+    if (peer?.id) {
+      setDmUnreadByPeer((current) => {
+        if (!current[peer.id]) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[peer.id];
+        return next;
+      });
+    }
+  }, [peer?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,21 +175,31 @@ export function ChatRoom({
       });
 
       socket.on(CHAT_EVENTS.dmMessage, (message: DirectMessageDto) => {
-        if (!isDm || !conversationId) {
-          return;
+        const viewingThisDm =
+          Boolean(isDm) &&
+          Boolean(conversationId) &&
+          message.conversationId === conversationId;
+
+        if (viewingThisDm) {
+          setMessages((current) => {
+            if (current.some((item) => item.id === message.id)) {
+              return current;
+            }
+
+            return [...current, message];
+          });
         }
 
-        if (message.conversationId !== conversationId) {
-          return;
+        // Unread badge: only count messages from the peer, not our own.
+        if (
+          message.author.id !== currentUserId &&
+          !viewingThisDm
+        ) {
+          setDmUnreadByPeer((current) => ({
+            ...current,
+            [message.author.id]: (current[message.author.id] ?? 0) + 1,
+          }));
         }
-
-        setMessages((current) => {
-          if (current.some((item) => item.id === message.id)) {
-            return current;
-          }
-
-          return [...current, message];
-        });
       });
 
       socket.on(CHAT_EVENTS.presence, (payload: ChatPresencePayload) => {
@@ -550,6 +583,7 @@ export function ChatRoom({
         teamId={teamId}
         activePeerUserId={peer?.id}
         recentPeers={recentPeers}
+        dmUnreadByPeer={dmUnreadByPeer}
       />
 
       <ConfirmDeleteDialog
