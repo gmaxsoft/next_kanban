@@ -45,7 +45,7 @@ function getPageTitle(pathname: string) {
     .filter((href) => href !== "/" && pathname.startsWith(href))
     .sort((a, b) => b.length - a.length)[0];
 
-  return match ? pageTitles[match] : "Next Kanban";
+  return match ? pageTitles[match] : "HelpDesk";
 }
 
 export function AppNavbar({

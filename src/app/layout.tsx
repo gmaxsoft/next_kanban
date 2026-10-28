@@ -17,10 +17,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Next Kanban",
-    template: "%s | Next Kanban",
+    default: "HelpDesk",
+    template: "%s | HelpDesk",
   },
-  description: "Tablica Kanban oparta o Next.js, Prisma i MySQL.",
+  description: "HelpDesk — tickety, tablice i czat zespołu.",
 };
 
 export default function RootLayout({

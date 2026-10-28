@@ -41,9 +41,7 @@ export default async function LoginPage({
 
         <div className="relative space-y-6">
           <h1 className="max-w-xl text-6xl leading-[0.95] font-semibold tracking-tight text-[#fff] xl:text-7xl">
-            Next
-            <br />
-            Kanban
+            HelpDesk
           </h1>
           <p className="max-w-md text-base leading-7 text-white/70">
             Tablice, zadania i czat zespołu w jednym spójnym, minimalnym panelu.
@@ -64,7 +62,7 @@ export default async function LoginPage({
         <div className="flex flex-1 flex-col justify-center px-6 py-16 sm:px-10 lg:px-14 xl:px-20">
           <div className="mb-10 space-y-3 lg:mb-12">
             <p className="text-xs font-semibold tracking-[0.22em] text-muted-foreground uppercase lg:hidden">
-              Next Kanban
+              HelpDesk
             </p>
             <p className="text-xs tracking-wide text-muted-foreground lg:hidden">
               Licencja:{" "}
@@ -95,8 +93,6 @@ export default async function LoginPage({
               <span className="font-medium text-foreground/80">
                 {license.companyName}
               </span>
-              {" · "}
-              Dostawca: {license.vendorName}
               {" · "}
               Autor: {license.authorName}
             </p>
