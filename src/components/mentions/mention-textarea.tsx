@@ -47,9 +47,9 @@ export function MentionTextarea({
     }
 
     const query = mentionQuery.toLowerCase();
-    return members
-      .filter((member) => member.name.toLowerCase().includes(query))
-      .slice(0, 6);
+    return members.filter((member) =>
+      member.name.toLowerCase().includes(query),
+    );
   }, [members, mentionQuery]);
 
   function syncMentionState(value: string, caret: number) {
@@ -168,7 +168,7 @@ export function MentionTextarea({
       />
 
       {mentionQuery !== null && suggestions.length > 0 ? (
-        <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-y-auto rounded-lg border bg-popover p-1 shadow-md sm:max-w-sm">
+        <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-72 w-full overflow-y-auto rounded-lg border bg-popover p-1 shadow-md sm:max-w-sm">
           {suggestions.map((member, index) => (
             <li key={member.id}>
               <button
