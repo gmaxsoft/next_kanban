@@ -6,7 +6,13 @@ import type { z } from "zod";
 
 import { requireAdmin } from "@/lib/auth-utils";
 import { prisma } from "@/lib/prisma";
-import { SYSTEM_ADMIN_SLUG, slugifyRoleName } from "@/lib/rbac";
+import {
+  roleFlagsFromPermission,
+  SYSTEM_ADMIN_SLUG,
+  SYSTEM_RESTRICTED_SLUG,
+  slugifyRoleName,
+  type RolePermission,
+} from "@/lib/rbac";
 import {
   firstZodError,
   roleSchema,
@@ -36,7 +42,7 @@ export async function createRole(
 
   const parsed = roleSchema.safeParse({
     name: String(formData.get("name") ?? ""),
-    isAdmin: formData.get("isAdmin") || "false",
+    permission: String(formData.get("permission") ?? "standard"),
   });
 
   if (!parsed.success) {
@@ -50,12 +56,15 @@ export async function createRole(
     slug = `${slug}_${Date.now().toString(36).toUpperCase()}`.slice(0, 64);
   }
 
+  const flags = roleFlagsFromPermission(parsed.data.permission);
+
   try {
     await prisma.appRole.create({
       data: {
         name: parsed.data.name,
         slug,
-        isAdmin: parsed.data.isAdmin === "true",
+        isAdmin: flags.isAdmin,
+        isRestricted: flags.isRestricted,
         isSystem: false,
       },
     });
@@ -82,7 +91,7 @@ export async function updateRole(
   const parsed = updateRoleSchema.safeParse({
     roleId: String(formData.get("roleId") ?? ""),
     name: String(formData.get("name") ?? ""),
-    isAdmin: formData.get("isAdmin") || "false",
+    permission: String(formData.get("permission") ?? "standard"),
   });
 
   if (!parsed.success) {
@@ -97,19 +106,36 @@ export async function updateRole(
     return { error: "Nie znaleziono roli." };
   }
 
-  if (role.slug === SYSTEM_ADMIN_SLUG && parsed.data.isAdmin !== "true") {
+  if (
+    role.slug === SYSTEM_ADMIN_SLUG &&
+    parsed.data.permission !== "admin"
+  ) {
     return { error: "Rola ADMINISTRATOR musi zachować uprawnienia admina." };
   }
+
+  if (
+    role.slug === SYSTEM_RESTRICTED_SLUG &&
+    parsed.data.permission !== "restricted"
+  ) {
+    return {
+      error: "Systemowa rola Ograniczone musi pozostać uprawnieniem Ograniczone.",
+    };
+  }
+
+  const flags =
+    role.slug === SYSTEM_ADMIN_SLUG
+      ? roleFlagsFromPermission("admin")
+      : role.slug === SYSTEM_RESTRICTED_SLUG
+        ? roleFlagsFromPermission("restricted")
+        : roleFlagsFromPermission(parsed.data.permission as RolePermission);
 
   try {
     await prisma.appRole.update({
       where: { id: role.id },
       data: {
         name: parsed.data.name,
-        isAdmin:
-          role.slug === SYSTEM_ADMIN_SLUG
-            ? true
-            : parsed.data.isAdmin === "true",
+        isAdmin: flags.isAdmin,
+        isRestricted: flags.isRestricted,
       },
     });
   } catch (error) {
@@ -142,8 +168,12 @@ export async function deleteRole(
     return { error: "Nie znaleziono roli." };
   }
 
-  if (role.slug === SYSTEM_ADMIN_SLUG || (role.isSystem && role.isAdmin)) {
-    return { error: "Roli ADMINISTRATOR nie można usunąć." };
+  if (
+    role.slug === SYSTEM_ADMIN_SLUG ||
+    role.slug === SYSTEM_RESTRICTED_SLUG ||
+    (role.isSystem && role.isAdmin)
+  ) {
+    return { error: "Tej systemowej roli nie można usunąć." };
   }
 
   if (role._count.users > 0) {

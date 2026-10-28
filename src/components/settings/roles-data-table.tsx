@@ -27,6 +27,7 @@ export type RolesTableRow = {
   slug: string;
   isSystem: boolean;
   isAdmin: boolean;
+  isRestricted: boolean;
   userCount: number;
   permissionLabel: string;
   searchText: string;

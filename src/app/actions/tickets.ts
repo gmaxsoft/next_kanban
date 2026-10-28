@@ -22,6 +22,7 @@ import {
   ticketStatusLabel,
 } from "@/lib/ticket-labels";
 import {
+  canUserAccessTicket,
   findTodoColumn,
   formatTicketId,
   resolveTicketReplyRecipient,
@@ -38,6 +39,22 @@ export type TicketActionState = {
 
 const statusSchema = z.enum(["OPEN", "IN_PROGRESS", "RESOLVED"]);
 const prioritySchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
+
+async function denyUnlessTicketAccess(
+  ticketId: string,
+  user: {
+    id: string;
+    isAdmin: boolean;
+    isRestricted: boolean;
+    teamId: string | null;
+  },
+) {
+  const allowed = await canUserAccessTicket(ticketId, user);
+  if (!allowed) {
+    return { error: "Nie masz dostępu do tego ticketu." } as const;
+  }
+  return null;
+}
 
 export async function reorderTickets(
   orderedIds: string[],
@@ -63,11 +80,20 @@ export async function reorderTickets(
   }
 
   if (!session.user.isAdmin) {
-    const unauthorized = tickets.some(
-      (ticket) => ticket.teamId !== session.user.teamId,
-    );
-    if (unauthorized) {
-      return { error: "Nie masz dostępu do tych ticketów." };
+    if (session.user.isRestricted) {
+      for (const ticket of tickets) {
+        const allowed = await canUserAccessTicket(ticket.id, session.user);
+        if (!allowed) {
+          return { error: "Nie masz dostępu do tych ticketów." };
+        }
+      }
+    } else {
+      const unauthorized = tickets.some(
+        (ticket) => ticket.teamId !== session.user.teamId,
+      );
+      if (unauthorized) {
+        return { error: "Nie masz dostępu do tych ticketów." };
+      }
     }
   }
 
@@ -110,8 +136,9 @@ export async function updateTicketPriority(
   if (!ticket) {
     return { error: "Nie znaleziono ticketu." };
   }
-  if (!session.user.isAdmin && ticket.teamId !== session.user.teamId) {
-    return { error: "Nie masz dostępu do tego ticketu." };
+  const denied = await denyUnlessTicketAccess(ticketId, session.user);
+  if (denied) {
+    return denied;
   }
 
   const priorityLabel = ticketPriorityLabel(priority.data);
@@ -162,8 +189,9 @@ export async function updateTicketStatus(
   if (!ticket) {
     return { error: "Nie znaleziono ticketu." };
   }
-  if (!session.user.isAdmin && ticket.teamId !== session.user.teamId) {
-    return { error: "Nie masz dostępu do tego ticketu." };
+  const deniedStatus = await denyUnlessTicketAccess(ticketId, session.user);
+  if (deniedStatus) {
+    return deniedStatus;
   }
 
   const statusLabel = ticketStatusLabel(status.data);
@@ -255,6 +283,9 @@ export async function updateTicketAssignee(
   formData: FormData,
 ): Promise<TicketActionState> {
   const session = await requireAuth();
+  if (session.user.isRestricted) {
+    return { error: "Brak uprawnień do zmiany przypisania." };
+  }
   const ticketId = String(formData.get("ticketId") ?? "");
   const assigneeId = String(formData.get("assigneeId") ?? "").trim() || null;
   const requesterUserId =
@@ -285,8 +316,9 @@ export async function updateTicketAssignee(
   if (!ticket) {
     return { error: "Nie znaleziono ticketu." };
   }
-  if (!session.user.isAdmin && ticket.teamId !== session.user.teamId) {
-    return { error: "Nie masz dostępu do tego ticketu." };
+  const deniedAssignee = await denyUnlessTicketAccess(ticketId, session.user);
+  if (deniedAssignee) {
+    return deniedAssignee;
   }
 
   const requestedIds = [
@@ -426,8 +458,9 @@ export async function addTicketInternalNote(
   if (!ticket) {
     return { error: "Nie znaleziono ticketu." };
   }
-  if (!session.user.isAdmin && ticket.teamId !== session.user.teamId) {
-    return { error: "Nie masz dostępu do tego ticketu." };
+  const deniedNote = await denyUnlessTicketAccess(ticketId, session.user);
+  if (deniedNote) {
+    return deniedNote;
   }
 
   const teamMembers = ticket.teamId
@@ -450,6 +483,12 @@ export async function addTicketInternalNote(
       bodyText: body.slice(0, 10000),
       authorId: session.user.id,
       fromName: session.user.name ?? "Administrator",
+      mentions:
+        mentionedIds.length > 0
+          ? {
+              create: mentionedIds.map((userId) => ({ userId })),
+            }
+          : undefined,
     },
   });
 
@@ -557,8 +596,12 @@ export async function editTicketInternalNote(
   if (!message || message.kind !== "INTERNAL") {
     return { error: "Nie znaleziono notatki wewnetrznej." };
   }
-  if (!session.user.isAdmin && message.ticket.teamId !== session.user.teamId) {
-    return { error: "Nie masz dostepu do tego ticketu." };
+  const deniedEdit = await denyUnlessTicketAccess(
+    message.ticket.id,
+    session.user,
+  );
+  if (deniedEdit) {
+    return deniedEdit;
   }
   if (!session.user.isAdmin && message.authorId !== session.user.id) {
     return { error: "Mozesz edytowac tylko swoje notatki." };
@@ -602,8 +645,9 @@ export async function replyToTicket(
   if (!ticket) {
     return { error: "Nie znaleziono ticketu." };
   }
-  if (!session.user.isAdmin && ticket.teamId !== session.user.teamId) {
-    return { error: "Nie masz dostępu do tego ticketu." };
+  const deniedReply = await denyUnlessTicketAccess(ticketId, session.user);
+  if (deniedReply) {
+    return deniedReply;
   }
   if (
     !ticket.team?.inboundEmail ||
@@ -719,8 +763,15 @@ export async function createTaskFromTicket(
   if (!ticket) {
     return { error: "Nie znaleziono ticketu." };
   }
-  if (!session.user.isAdmin && ticket.teamId !== session.user.teamId) {
-    return { error: "Nie masz dostępu do tego ticketu." };
+  if (session.user.isRestricted) {
+    return { error: "Brak uprawnień do tworzenia zadania z ticketu." };
+  }
+  const deniedTask = await denyUnlessTicketAccess(
+    parsed.data.ticketId,
+    session.user,
+  );
+  if (deniedTask) {
+    return deniedTask;
   }
 
   if (ticket.taskId) {

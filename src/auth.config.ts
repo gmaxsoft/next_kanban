@@ -5,6 +5,7 @@ import {
   SESSION_MAX_AGE_REMEMBERED,
   sessionMaxAgeSeconds,
 } from "@/lib/auth-session";
+import { isRestrictedAllowedPath } from "@/lib/rbac";
 
 const publicRoutes = ["/login"];
 
@@ -54,7 +55,9 @@ export const authConfig = {
 
       if (isPublicRoute) {
         if (isLoggedIn) {
-          return Response.redirect(new URL("/", request.nextUrl));
+          const home =
+            auth?.user?.isRestricted ? "/tickets" : "/";
+          return Response.redirect(new URL(home, request.nextUrl));
         }
 
         return true;
@@ -62,6 +65,10 @@ export const authConfig = {
 
       if (!isLoggedIn) {
         return false;
+      }
+
+      if (auth?.user?.isRestricted && !isRestrictedAllowedPath(pathname)) {
+        return Response.redirect(new URL("/tickets", request.nextUrl));
       }
 
       return true;
@@ -75,6 +82,7 @@ export const authConfig = {
           Math.floor(Date.now() / 1000) + sessionMaxAgeSeconds(rememberMe);
         token.id = user.id!;
         token.isAdmin = user.isAdmin;
+        token.isRestricted = user.isRestricted;
         token.roleId = user.roleId;
         token.roleName = user.roleName;
         token.teamId = user.teamId;
@@ -98,6 +106,12 @@ export const authConfig = {
         if ("isAdmin" in session.user && typeof session.user.isAdmin === "boolean") {
           token.isAdmin = session.user.isAdmin;
         }
+        if (
+          "isRestricted" in session.user &&
+          typeof session.user.isRestricted === "boolean"
+        ) {
+          token.isRestricted = session.user.isRestricted;
+        }
         if ("teamId" in session.user) {
           token.teamId = session.user.teamId ?? null;
         }
@@ -111,6 +125,7 @@ export const authConfig = {
     session({ session, token }) {
       session.user.id = token.id;
       session.user.isAdmin = Boolean(token.isAdmin);
+      session.user.isRestricted = Boolean(token.isRestricted);
       session.user.roleId = token.roleId;
       session.user.roleName = token.roleName;
       session.user.teamId = token.teamId ?? null;

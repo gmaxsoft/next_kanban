@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireAdmin } from "@/lib/auth-utils";
 import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
@@ -20,8 +20,8 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsPage() {
-  const session = await requireAuth();
-  const canManage = session.user.isAdmin;
+  const session = await requireAdmin();
+  const canManage = true;
 
   const [roles, teams] = await Promise.all([
     prisma.appRole.findMany({
@@ -85,7 +85,8 @@ export default async function SettingsPage() {
             <CardHeader>
               <CardTitle>Role</CardTitle>
               <CardDescription>
-                Definiuj role uprawnień. Roli ADMINISTRATOR nie można usunąć.
+                Uprawnienia: Administrator, Standardowe lub Ograniczone (tylko
+                Tickety). Ról systemowych nie można usunąć.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -97,6 +98,7 @@ export default async function SettingsPage() {
                   slug: role.slug,
                   isSystem: role.isSystem,
                   isAdmin: role.isAdmin,
+                  isRestricted: role.isRestricted,
                   userCount: role._count.users,
                 }))}
               />

@@ -13,6 +13,7 @@ import {
   removeStoredAvatar,
   storeAvatarUpload,
 } from "@/lib/avatar-uploads.server";
+import { isRestrictedAllowedPath } from "@/lib/rbac";
 import { safeCallbackUrl } from "@/lib/user";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -45,7 +46,22 @@ export async function login(
   }
 
   const rememberMe = isRememberMeChecked(formData.get("rememberMe"));
-  const callbackUrl = safeCallbackUrl(formData.get("callbackUrl"));
+  const requestedCallback = safeCallbackUrl(formData.get("callbackUrl"));
+
+  const account = await prisma.user.findUnique({
+    where: { email: parsed.data.email },
+    select: {
+      role: { select: { isAdmin: true, isRestricted: true } },
+    },
+  });
+  const isRestricted =
+    Boolean(account) &&
+    !account!.role.isAdmin &&
+    account!.role.isRestricted;
+  const callbackUrl =
+    isRestricted && !isRestrictedAllowedPath(requestedCallback)
+      ? "/tickets"
+      : requestedCallback;
 
   const signedIn = await signInWithPersistence({
     email: parsed.data.email,
@@ -244,6 +260,9 @@ export async function updateUser(
   formData: FormData,
 ): Promise<AuthActionState> {
   const session = await requireAuth();
+  if (session.user.isRestricted) {
+    return { error: "Brak uprawnień do zarządzania użytkownikami." };
+  }
   const isAdmin = session.user.isAdmin;
 
   const parsed = updateUserSchema.safeParse({
@@ -277,7 +296,9 @@ export async function updateUser(
       isActive: true,
       roleId: true,
       teamId: true,
-      role: { select: { id: true, isAdmin: true, name: true } },
+      role: {
+        select: { id: true, isAdmin: true, isRestricted: true, name: true },
+      },
     },
   });
 
@@ -305,7 +326,7 @@ export async function updateUser(
 
   const nextRole = await prisma.appRole.findUnique({
     where: { id: nextRoleId },
-    select: { id: true, isAdmin: true, name: true },
+    select: { id: true, isAdmin: true, isRestricted: true, name: true },
   });
 
   if (!nextRole) {
@@ -392,6 +413,7 @@ export async function updateUser(
         roleId: nextRoleId,
         roleName: nextRole.name,
         isAdmin: nextRole.isAdmin,
+        isRestricted: !nextRole.isAdmin && Boolean(nextRole.isRestricted),
         teamId: nextTeamId,
         teamName,
       },

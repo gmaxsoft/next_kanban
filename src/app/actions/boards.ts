@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { requireAuth } from "@/lib/auth-utils";
+import { denyIfRestricted } from "@/lib/auth-utils";
 import { notifyTaskParticipants } from "@/lib/task-notifications";
 import { prisma } from "@/lib/prisma";
 import { normalizeRichTextInput } from "@/lib/rich-text";
@@ -23,7 +23,11 @@ export async function createBoard(
   _prevState: BoardActionState,
   formData: FormData,
 ): Promise<BoardActionState> {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
 
   if (!session.user.isAdmin) {
     return { error: "Tylko ADMINISTRATOR może tworzyć tablice." };
@@ -75,7 +79,11 @@ export async function createTask(
   _prevState: BoardActionState,
   formData: FormData,
 ): Promise<BoardActionState> {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
 
   if (!session.user.isAdmin) {
     return { error: "Tylko ADMINISTRATOR może dodawać zadania." };
@@ -179,7 +187,11 @@ export async function moveTask(input: {
   toColumnId: string;
   toIndex: number;
 }) {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
 
   const parsed = moveTaskSchema.safeParse(input);
 
@@ -280,7 +292,11 @@ export async function archiveTask(
   boardId: string,
   taskId: string,
 ): Promise<BoardActionState> {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
 
   const task = await prisma.task.findFirst({
     where: { id: taskId, column: { boardId }, archive: null },
@@ -326,7 +342,11 @@ export async function restoreArchivedTask(
   boardId: string,
   taskId: string,
 ): Promise<BoardActionState> {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
 
   const archive = await prisma.taskArchive.findFirst({
     where: { taskId, boardId },
@@ -386,7 +406,11 @@ export async function deleteTask(
   boardId: string,
   taskId: string,
 ): Promise<BoardActionState> {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
 
   if (!session.user.isAdmin) {
     return { error: "Tylko ADMINISTRATOR może usuwać zadania." };

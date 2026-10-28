@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireAdmin } from "@/lib/auth-utils";
 import {
   listAssignBoards,
   listAssignMembers,
@@ -31,27 +31,14 @@ const PRIORITY_LABELS = {
 } as const;
 
 export default async function TasksPage() {
-  const session = await requireAuth();
-  const isAdmin = session.user.isAdmin;
-  const teamScope = session.user.teamId ?? "00000000-0000-0000-0000-000000000000";
+  await requireAdmin();
 
-  const [allTeams, allBoards, allMembers, { items: tasks }] = await Promise.all([
+  const [teams, boards, members, { items: tasks }] = await Promise.all([
     listTeams(),
     listAssignBoards(),
-    isAdmin ? listAssignMembers() : Promise.resolve([]),
-    listAssignedTasks(
-      isAdmin ? {} : { team: teamScope },
-      { page: 1, pageSize: 10_000 },
-    ),
+    listAssignMembers(),
+    listAssignedTasks({}, { page: 1, pageSize: 10_000 }),
   ]);
-
-  const teams = isAdmin
-    ? allTeams
-    : allTeams.filter((team) => team.id === session.user.teamId);
-  const boards = isAdmin
-    ? allBoards
-    : allBoards.filter((board) => board.teamId === teamScope);
-  const members = isAdmin ? allMembers : [];
 
   const rows: TasksTableRow[] = tasks.map((task) => {
     const priorityLabel = PRIORITY_LABELS[task.priority];
@@ -90,31 +77,27 @@ export default async function TasksPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Zadania</h2>
         <p className="text-sm text-muted-foreground">
-          {isAdmin
-            ? "Wybierz zespół, tablicę i osoby do przydzielenia."
-            : "Zadania dostępne dla Twojego zespołu."}
+          Wybierz zespół, tablicę i osoby do przydzielenia.
         </p>
       </div>
 
-      {isAdmin ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Nowe przydzielenie</CardTitle>
-            <CardDescription>
-              Najpierw wybierz zespół — wtedy pojawią się tablice i osoby z tego
-              zespołu.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AssignTaskForm teams={teams} boards={boards} members={members} />
-          </CardContent>
-        </Card>
-      ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle>Nowe przydzielenie</CardTitle>
+          <CardDescription>
+            Najpierw wybierz zespół — wtedy pojawią się tablice i osoby z tego
+            zespołu.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AssignTaskForm teams={teams} boards={boards} members={members} />
+        </CardContent>
+      </Card>
 
       <Card>
         <TasksDataTable
           data={rows}
-          isAdmin={isAdmin}
+          isAdmin
           description={`${rows.length} ${
             rows.length === 1
               ? "pozycja"

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin, requireAuth } from "@/lib/auth-utils";
+import { denyIfRestricted, requireAdmin } from "@/lib/auth-utils";
 import { taskPath } from "@/lib/board-query";
 import { notifyTaskParticipants } from "@/lib/task-notifications";
 import { notifyTaskCommented } from "@/lib/mail";
@@ -25,7 +25,11 @@ export type TaskActionState = {
 export async function reorderTasks(
   orderedIds: string[],
 ): Promise<TaskActionState> {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
 
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
     return { error: "Brak kolejności zadań." };
@@ -187,7 +191,11 @@ export async function updateTask(
   _prevState: TaskActionState,
   formData: FormData,
 ): Promise<TaskActionState> {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
   const isAdmin = session.user.isAdmin;
   const assigneeIds = formData
     .getAll("assigneeIds")
@@ -324,7 +332,11 @@ export async function uploadTaskAttachment(
   _prevState: TaskActionState,
   formData: FormData,
 ): Promise<TaskActionState> {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
   const boardId = String(formData.get("boardId") ?? "");
   const taskId = String(formData.get("taskId") ?? "");
   const file = formData.get("file");
@@ -381,7 +393,11 @@ export async function addComment(
   _prevState: TaskActionState,
   formData: FormData,
 ): Promise<TaskActionState> {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
   const explicitMentionIds = formData
     .getAll("mentionedIds")
     .map((value) => String(value))

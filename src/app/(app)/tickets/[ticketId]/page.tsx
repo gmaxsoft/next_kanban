@@ -25,7 +25,11 @@ import { taskPath } from "@/lib/board-query";
 import { listAssignBoards } from "@/lib/boards";
 import { prisma } from "@/lib/prisma";
 import { sanitizeRichText } from "@/lib/rich-text";
-import { formatTicketId, getTicketDetails } from "@/lib/tickets";
+import {
+  canUserAccessTicket,
+  formatTicketId,
+  getTicketDetails,
+} from "@/lib/tickets";
 
 type TicketPageProps = {
   params: Promise<{ ticketId: string }>;
@@ -41,7 +45,15 @@ export async function generateMetadata({
     select: { number: true, subject: true, teamId: true },
   });
 
-  if (ticket && !session.user.isAdmin && ticket.teamId !== session.user.teamId) {
+  if (
+    ticket &&
+    !(await canUserAccessTicket(ticketId, {
+      id: session.user.id,
+      isAdmin: session.user.isAdmin,
+      isRestricted: session.user.isRestricted,
+      teamId: session.user.teamId,
+    }))
+  ) {
     return { title: "Ticket" };
   }
 
@@ -59,12 +71,18 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
 
   if (
     !ticket ||
-    (!session.user.isAdmin && ticket.teamId !== session.user.teamId)
+    !(await canUserAccessTicket(ticketId, {
+      id: session.user.id,
+      isAdmin: session.user.isAdmin,
+      isRestricted: session.user.isRestricted,
+      teamId: session.user.teamId,
+    }))
   ) {
     notFound();
   }
 
   const isAdmin = session.user.isAdmin;
+  const isRestricted = session.user.isRestricted;
   const [teams, boards, members] = await Promise.all([
     isAdmin
       ? prisma.team.findMany({
@@ -143,26 +161,41 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Odpowiedzialny i obserwujący</CardTitle>
-          <CardDescription>
-            Obserwujący dostają powiadomienia w aplikacji i e-mailem o zmianach w tickecie.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <TicketAssigneeForm
-            ticketId={ticket.id}
-            assigneeId={ticket.assigneeId}
-            watcherIds={ticket.watchers.map((watcher) => watcher.userId)}
-            requestedBy={ticket.requestedBy ?? ticket.requesterName ?? ticket.requesterEmail}
-            requesterEmail={ticket.requesterEmail}
-            members={members}
-          />
-        </CardContent>
-      </Card>
+      {!isRestricted ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Odpowiedzialny i obserwujący</CardTitle>
+            <CardDescription>
+              Obserwujący dostają powiadomienia w aplikacji i e-mailem o zmianach w tickecie.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TicketAssigneeForm
+              ticketId={ticket.id}
+              assigneeId={ticket.assigneeId}
+              watcherIds={ticket.watchers.map((watcher) => watcher.userId)}
+              requestedBy={
+                ticket.requestedBy ??
+                ticket.requesterName ??
+                ticket.requesterEmail
+              }
+              requesterEmail={ticket.requesterEmail}
+              members={members}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Odpowiedzialny</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            {ticket.assignee?.name ?? "Nieprzypisany"}
+          </CardContent>
+        </Card>
+      )}
 
-      {ticket.task ? (
+      {!isRestricted && ticket.task ? (
         <Card>
           <CardHeader>
             <CardTitle>Powiązane zadanie Kanban</CardTitle>
@@ -182,20 +215,24 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
             </Button>
           </CardContent>
         </Card>
-      ) : (
+      ) : null}
+
+      {!isRestricted && !ticket.task ? (
         <CreateTaskFromTicketForm
           ticketId={ticket.id}
           currentTeamId={ticket.teamId}
           teams={teams}
           boards={boards}
           members={members}
-          requestedBy={ticket.requestedBy ?? ticket.requesterName ?? ticket.requesterEmail}
+          requestedBy={
+            ticket.requestedBy ?? ticket.requesterName ?? ticket.requesterEmail
+          }
           assigneeId={ticket.assigneeId}
           watcherIds={ticket.watchers.map((watcher) => watcher.userId)}
           hasTask={false}
           canAssignTeam={isAdmin}
         />
-      )}
+      ) : null}
 
       <Card>
         <CardHeader>

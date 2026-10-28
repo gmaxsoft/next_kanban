@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAuth } from "@/lib/auth-utils";
+import { denyIfRestricted } from "@/lib/auth-utils";
 import { taskPath } from "@/lib/board-query";
 import { parseSearchQuery } from "@/lib/list-query";
 import { prisma } from "@/lib/prisma";
@@ -25,7 +25,11 @@ export type GlobalSearchResult = {
 };
 
 export async function searchApp(rawQuery: string): Promise<GlobalSearchResult> {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { boards: [], tasks: [] };
+  }
+  const session = access.session;
   const query = parseSearchQuery(rawQuery);
 
   if (query.length < 2) {

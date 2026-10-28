@@ -5,6 +5,7 @@ declare module "next-auth" {
     user: {
       id: string;
       isAdmin: boolean;
+      isRestricted: boolean;
       roleId: string;
       roleName: string;
       teamId: string | null;
@@ -15,6 +16,7 @@ declare module "next-auth" {
   interface User {
     id: string;
     isAdmin: boolean;
+    isRestricted: boolean;
     roleId: string;
     roleName: string;
     teamId: string | null;
@@ -26,6 +28,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     id: string;
     isAdmin: boolean;
+    isRestricted: boolean;
     roleId: string;
     roleName: string;
     teamId: string | null;
@@ -37,6 +40,7 @@ declare module "@auth/core/jwt" {
   interface JWT {
     id: string;
     isAdmin: boolean;
+    isRestricted: boolean;
     roleId: string;
     roleName: string;
     teamId: string | null;

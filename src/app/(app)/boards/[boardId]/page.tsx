@@ -9,7 +9,7 @@ import { BoardViewTabs } from "@/components/kanban/board-view-tabs";
 import { KanbanBoard } from "@/components/kanban/kanban-board";
 import { TaskListView } from "@/components/kanban/task-list-view";
 import { Button } from "@/components/ui/button";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireAuth, requireUnrestrictedAuth } from "@/lib/auth-utils";
 import { parseBoardSearch, taskPath } from "@/lib/board-query";
 import {
   getBoardWithColumns,
@@ -44,7 +44,7 @@ export async function generateMetadata({
 }
 
 export default async function BoardPage({ params, searchParams }: BoardPageProps) {
-  const session = await requireAuth();
+  const session = await requireUnrestrictedAuth();
   const { boardId } = await params;
   const { q, assignee, taskId, view } = parseBoardSearch(await searchParams);
   const canCreateTasks = session.user.isAdmin;

@@ -20,7 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PriorityBadge } from "@/components/kanban/priority-badge";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireUnrestrictedAuth } from "@/lib/auth-utils";
 import { taskPath } from "@/lib/board-query";
 import { prisma } from "@/lib/prisma";
 
@@ -48,7 +48,7 @@ function formatDueDate(value: Date | null) {
 }
 
 export default async function HomePage() {
-  const session = await requireAuth();
+  const session = await requireUnrestrictedAuth();
   const isAdmin = session.user.isAdmin;
   const userId = session.user.id;
   const teamId = session.user.teamId;

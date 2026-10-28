@@ -14,7 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireAuth, requireUnrestrictedAuth } from "@/lib/auth-utils";
 import { getBoardWithColumns, getTaskDetails, listBoardMembers } from "@/lib/boards";
 import { formatTaskCreatedAt } from "@/lib/task-format";
 
@@ -38,7 +38,7 @@ export async function generateMetadata({
 }
 
 export default async function TaskDetailsPage({ params }: TaskDetailsPageProps) {
-  const session = await requireAuth();
+  const session = await requireUnrestrictedAuth();
   const { boardId, taskId } = await params;
   const canManageAssignments = session.user.isAdmin || session.user.teamId !== null;
 

@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireUnrestrictedAuth } from "@/lib/auth-utils";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_TEAM_ID } from "@/lib/rbac";
 import { formatActiveStatus } from "@/lib/user";
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 };
 
 export default async function UsersPage() {
-  const session = await requireAuth();
+  const session = await requireUnrestrictedAuth();
   const isAdmin = session.user.isAdmin;
 
   const [users, roles, teams] = await Promise.all([

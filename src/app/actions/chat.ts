@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAuth } from "@/lib/auth-utils";
+import { denyIfRestricted } from "@/lib/auth-utils";
 import {
   countUnreadChatMessages,
   markChatTeamRead,
@@ -11,7 +11,11 @@ import {
 import { prisma } from "@/lib/prisma";
 
 export async function markChatTeamAsRead(teamId: string) {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
 
   if (!teamId) {
     return { error: "Brak zespołu." as const };
@@ -36,7 +40,11 @@ export async function markChatTeamAsRead(teamId: string) {
 }
 
 export async function markDirectConversationAsRead(conversationId: string) {
-  const session = await requireAuth();
+  const access = await denyIfRestricted();
+  if (access.error) {
+    return { error: access.error };
+  }
+  const session = access.session;
 
   if (!conversationId) {
     return { error: "Brak rozmowy." as const };

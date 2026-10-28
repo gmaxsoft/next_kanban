@@ -36,16 +36,30 @@ type NavItem = {
   href: string;
   icon: typeof LayoutDashboard;
   adminOnly?: boolean;
+  /** Hidden for tickets-only (Ograniczone) roles. */
+  hideWhenRestricted?: boolean;
 };
 
 const navItems: NavItem[] = [
-  { title: "Pulpit", href: "/", icon: LayoutDashboard },
-  { title: "Zadania", href: "/tasks", icon: ListTodo },
+  { title: "Pulpit", href: "/", icon: LayoutDashboard, hideWhenRestricted: true },
+  {
+    title: "Zadania",
+    href: "/tasks",
+    icon: ListTodo,
+    adminOnly: true,
+    hideWhenRestricted: true,
+  },
   { title: "Tickety", href: "/tickets", icon: Ticket },
-  { title: "Tablice", href: "/boards", icon: Columns3 },
-  { title: "Czat", href: "/chat", icon: MessageCircle },
-  { title: "Ustawienia", href: "/settings", icon: Settings },
-  { title: "Użytkownicy", href: "/users", icon: Users },
+  { title: "Tablice", href: "/boards", icon: Columns3, hideWhenRestricted: true },
+  { title: "Czat", href: "/chat", icon: MessageCircle, hideWhenRestricted: true },
+  {
+    title: "Ustawienia",
+    href: "/settings",
+    icon: Settings,
+    adminOnly: true,
+    hideWhenRestricted: true,
+  },
+  { title: "Użytkownicy", href: "/users", icon: Users, hideWhenRestricted: true },
 ];
 
 function ChatUnreadBadge({ count }: { count: number }) {
@@ -72,6 +86,7 @@ export function AppSidebar({
 }) {
   const pathname = usePathname();
   const isAdmin = user.isAdmin;
+  const isRestricted = user.isRestricted;
   const liveUnread = useChatUnreadCount(chatUnreadCount);
 
   return (
@@ -81,7 +96,7 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              render={<Link href="/" />}
+              render={<Link href={isRestricted ? "/tickets" : "/"} />}
               tooltip="Kanban"
             >
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
@@ -104,7 +119,15 @@ export function AppSidebar({
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems
-                .filter((item) => !item.adminOnly || isAdmin)
+                .filter((item) => {
+                  if (item.adminOnly && !isAdmin) {
+                    return false;
+                  }
+                  if (isRestricted && item.hideWhenRestricted) {
+                    return false;
+                  }
+                  return true;
+                })
                 .map((item) => {
                   const isActive =
                     item.href === "/"

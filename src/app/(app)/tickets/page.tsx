@@ -16,10 +16,15 @@ export const metadata: Metadata = {
 export default async function TicketsPage() {
   const session = await requireAuth();
   const isAdmin = session.user.isAdmin;
+  const isRestricted = session.user.isRestricted;
   const teamScope = session.user.teamId ?? "00000000-0000-0000-0000-000000000000";
 
   const { items: tickets } = await listTickets(
-    isAdmin ? {} : { team: teamScope },
+    isAdmin
+      ? {}
+      : isRestricted
+        ? { scopedUserId: session.user.id }
+        : { team: teamScope },
     { page: 1, pageSize: 10_000 },
   );
 
@@ -70,7 +75,9 @@ export default async function TicketsPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Tickety</h2>
         <p className="text-sm text-muted-foreground">
-          Zgłoszenia z e-maili przychodzących przypisane do Twojego zespołu.
+          {isRestricted
+            ? "Zgłoszenia przypisane do Ciebie oraz te, w których jesteś wspomniany w notatkach."
+            : "Zgłoszenia z e-maili przychodzących przypisane do Twojego zespołu."}
         </p>
       </div>
 

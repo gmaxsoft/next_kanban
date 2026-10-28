@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { ListFilters, type ListFilterField } from "@/components/ui/list-filters";
 import { ListPagination } from "@/components/ui/list-pagination";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireUnrestrictedAuth } from "@/lib/auth-utils";
 import { listBoards, listTeams } from "@/lib/boards";
 import {
   parseBoardsListSearch,
@@ -34,7 +34,7 @@ type BoardsPageProps = {
 };
 
 export default async function BoardsPage({ searchParams }: BoardsPageProps) {
-  const session = await requireAuth();
+  const session = await requireUnrestrictedAuth();
   const isAdmin = session.user.isAdmin;
   const teamScope = session.user.teamId ?? "00000000-0000-0000-0000-000000000000";
   const params = await searchParams;

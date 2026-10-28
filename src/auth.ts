@@ -41,7 +41,14 @@ const nextAuthConfig = {
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email.toLowerCase() },
           include: {
-            role: { select: { id: true, name: true, isAdmin: true } },
+            role: {
+              select: {
+                id: true,
+                name: true,
+                isAdmin: true,
+                isRestricted: true,
+              },
+            },
             team: { select: { id: true, name: true } },
           },
         });
@@ -65,6 +72,7 @@ const nextAuthConfig = {
           email: user.email,
           image: user.avatarUrl,
           isAdmin: user.role.isAdmin,
+          isRestricted: !user.role.isAdmin && user.role.isRestricted,
           roleId: user.role.id,
           roleName: user.role.name,
           teamId: user.team?.id ?? null,

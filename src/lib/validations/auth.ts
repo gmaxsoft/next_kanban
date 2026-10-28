@@ -77,7 +77,7 @@ export const roleSchema = z.object({
     .trim()
     .min(2, "Nazwa roli musi mieć co najmniej 2 znaki")
     .max(60, "Nazwa roli może mieć maksymalnie 60 znaków"),
-  isAdmin: z.enum(["true", "false"]).default("false"),
+  permission: z.enum(["standard", "restricted", "admin"]).default("standard"),
 });
 
 export const updateRoleSchema = roleSchema.extend({

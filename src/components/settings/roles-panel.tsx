@@ -22,7 +22,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useActionToast } from "@/hooks/use-action-toast";
-import { SYSTEM_ADMIN_SLUG } from "@/lib/rbac";
+import {
+  rolePermissionFromFlags,
+  rolePermissionLabel,
+  SYSTEM_ADMIN_SLUG,
+  SYSTEM_RESTRICTED_SLUG,
+  type RolePermission,
+} from "@/lib/rbac";
 
 const selectClassName =
   "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
@@ -33,8 +39,21 @@ export type RoleRow = {
   slug: string;
   isSystem: boolean;
   isAdmin: boolean;
+  isRestricted: boolean;
   userCount: number;
 };
+
+function permissionOptions(locked?: RolePermission) {
+  const all: { value: RolePermission; label: string }[] = [
+    { value: "standard", label: "Standardowe" },
+    { value: "restricted", label: "Ograniczone" },
+    { value: "admin", label: "Jak administrator" },
+  ];
+  if (!locked) {
+    return all;
+  }
+  return all.filter((option) => option.value === locked);
+}
 
 export function RolesPanel({
   roles,
@@ -52,9 +71,8 @@ export function RolesPanel({
   const rows: RolesTableRow[] = useMemo(
     () =>
       roles.map((role) => {
-        const permissionLabel = role.isAdmin
-          ? "Administrator"
-          : "Standardowe";
+        const permission = rolePermissionFromFlags(role);
+        const permissionLabel = rolePermissionLabel(permission);
         return {
           ...role,
           permissionLabel,
@@ -70,7 +88,8 @@ export function RolesPanel({
     (role: RolesTableRow) => (
       <>
         <EditRoleButton role={role} />
-        {role.slug === SYSTEM_ADMIN_SLUG ? (
+        {role.slug === SYSTEM_ADMIN_SLUG ||
+        role.slug === SYSTEM_RESTRICTED_SLUG ? (
           <span className="self-center text-xs text-muted-foreground">
             Chroniona
           </span>
@@ -104,15 +123,18 @@ export function RolesPanel({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="role-admin">Uprawnienia</Label>
+            <Label htmlFor="role-permission">Uprawnienia</Label>
             <select
-              id="role-admin"
-              name="isAdmin"
-              defaultValue="false"
+              id="role-permission"
+              name="permission"
+              defaultValue="standard"
               className={selectClassName}
             >
-              <option value="false">Standardowe</option>
-              <option value="true">Jak administrator</option>
+              {permissionOptions().map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
           <Button type="submit" disabled={createPending}>
@@ -149,6 +171,14 @@ function EditRoleButton({ role }: { role: RoleRow }) {
     }
   }, [state?.success]);
 
+  const currentPermission = rolePermissionFromFlags(role);
+  const lockedPermission =
+    role.slug === SYSTEM_ADMIN_SLUG
+      ? ("admin" as const)
+      : role.slug === SYSTEM_RESTRICTED_SLUG
+        ? ("restricted" as const)
+        : undefined;
+
   return (
     <>
       <Button
@@ -178,17 +208,32 @@ function EditRoleButton({ role }: { role: RoleRow }) {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor={`role-edit-admin-${role.id}`}>Uprawnienia</Label>
+              <Label htmlFor={`role-edit-permission-${role.id}`}>
+                Uprawnienia
+              </Label>
               <select
-                id={`role-edit-admin-${role.id}`}
-                name="isAdmin"
-                defaultValue={role.isAdmin ? "true" : "false"}
+                id={`role-edit-permission-${role.id}`}
+                name="permission"
+                defaultValue={currentPermission}
                 className={selectClassName}
-                disabled={role.slug === SYSTEM_ADMIN_SLUG}
+                disabled={Boolean(lockedPermission)}
               >
-                <option value="false">Standardowe</option>
-                <option value="true">Jak administrator</option>
+                {permissionOptions(lockedPermission).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
+              {lockedPermission ? (
+                <p className="text-xs text-muted-foreground">
+                  Uprawnienia tej systemowej roli są zablokowane.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Ograniczone: tylko menu Tickety i własne / wzmiankowane
+                  zgłoszenia.
+                </p>
+              )}
             </div>
             <Button type="submit" disabled={pending} className="w-fit">
               {pending ? "Zapisywanie..." : "Zapisz"}
