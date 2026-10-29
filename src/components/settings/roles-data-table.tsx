@@ -158,10 +158,12 @@ export function RolesDataTable({
           className="pl-8"
         />
       </div>
-      <DataTable
-        table={table}
-        emptyMessage="Brak ról pasujących do filtrów."
-      />
+      <div className="rounded-md border bg-muted/40 px-3 py-2">
+        <DataTable
+          table={table}
+          emptyMessage="Brak ról pasujących do filtrów."
+        />
+      </div>
       <DataTablePagination table={table} />
     </div>
   );

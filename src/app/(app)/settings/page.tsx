@@ -43,8 +43,8 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="teams">
-        <TabsList>
+      <Tabs defaultValue="teams" className="gap-0">
+        <TabsList variant="line">
           <TabsTrigger value="teams">Zespoły</TabsTrigger>
           <TabsTrigger value="roles">Role</TabsTrigger>
         </TabsList>
