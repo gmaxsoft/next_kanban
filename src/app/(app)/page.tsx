@@ -6,10 +6,13 @@ import {
   Columns3,
   ListTodo,
   Plus,
+  Ticket,
   UserRound,
   Users,
 } from "lucide-react";
 
+import { PriorityBadge } from "@/components/kanban/priority-badge";
+import { TicketStatusBadge } from "@/components/tickets/ticket-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,10 +22,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PriorityBadge } from "@/components/kanban/priority-badge";
 import { requireUnrestrictedAuth } from "@/lib/auth-utils";
 import { taskPath } from "@/lib/board-query";
 import { prisma } from "@/lib/prisma";
+import { formatTicketId } from "@/lib/tickets";
 
 function startOfToday() {
   const date = new Date();
@@ -47,6 +50,13 @@ function formatDueDate(value: Date | null) {
   return value.toLocaleDateString("pl-PL", { dateStyle: "medium" });
 }
 
+function formatTicketArrival(value: Date) {
+  return value.toLocaleString("pl-PL", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
 export default async function HomePage() {
   const session = await requireUnrestrictedAuth();
   const isAdmin = session.user.isAdmin;
@@ -63,20 +73,26 @@ export default async function HomePage() {
     ? { teamId }
     : { id: { in: [] } };
 
-  const teamUserFilter: Prisma.UserWhereInput = teamId
-    ? { isActive: true, teamId }
-    : { id: userId };
+  const ticketScope: Prisma.TicketWhereInput = {
+    mergedIntoId: null,
+    ...(isAdmin ? {} : teamId ? { teamId } : { id: { in: [] } }),
+  };
 
   const [
     boardCount,
     taskCount,
-    userCount,
+    openTicketCount,
+    inProgressTicketCount,
+    resolvedTicketCount,
+    myTicketCount,
+    unassignedTicketCount,
+    recentTickets,
     highPriorityCount,
     mediumPriorityCount,
     lowPriorityCount,
     overdueCount,
     dueSoonCount,
-    unassignedCount,
+    unassignedTaskCount,
     myTaskCount,
     myTasksPreview,
   ] = await Promise.all([
@@ -86,9 +102,37 @@ export default async function HomePage() {
     isAdmin
       ? prisma.task.count()
       : prisma.task.count({ where: myAssignmentFilter }),
+    prisma.ticket.count({
+      where: { ...ticketScope, status: "OPEN" },
+    }),
+    prisma.ticket.count({
+      where: { ...ticketScope, status: "IN_PROGRESS" },
+    }),
+    prisma.ticket.count({
+      where: { ...ticketScope, status: "RESOLVED" },
+    }),
+    prisma.ticket.count({
+      where: { ...ticketScope, assigneeId: userId },
+    }),
     isAdmin
-      ? prisma.user.count({ where: { isActive: true } })
-      : prisma.user.count({ where: teamUserFilter }),
+      ? prisma.ticket.count({
+          where: { ...ticketScope, assigneeId: null },
+        })
+      : Promise.resolve(0),
+    prisma.ticket.findMany({
+      where: ticketScope,
+      take: 5,
+      orderBy: { lastMessageAt: "desc" },
+      select: {
+        id: true,
+        number: true,
+        subject: true,
+        status: true,
+        priority: true,
+        lastMessageAt: true,
+        assignee: { select: { name: true } },
+      },
+    }),
     prisma.task.count({
       where: {
         priority: "HIGH",
@@ -142,32 +186,39 @@ export default async function HomePage() {
     }),
   ]);
 
-  const overviewStats = isAdmin
-    ? [
-        {
-          title: "Tablice",
-          href: "/boards",
-          value: String(boardCount),
-          description: "Wszystkie tablice w systemie",
-          icon: Columns3,
-        },
-        {
-          title: "Zadania",
-          href: "/tasks",
-          value: String(taskCount),
-          description: "Wszystkie karty na tablicach",
-          icon: ListTodo,
-        },
-        {
-          title: "Członkowie",
-          href: "/users",
-          value: String(userCount),
-          description: "Aktywni użytkownicy w przestrzeni",
-          icon: Users,
-        },
-      ]
-    : [
-        {
+  const ticketOverviewStats = [
+    {
+      title: "Otwarte",
+      href: "/tickets",
+      value: String(openTicketCount),
+      description: isAdmin
+        ? "Tickety oczekujące w systemie"
+        : "Otwarte w Twoim zespole",
+      icon: Ticket,
+    },
+    {
+      title: "W trakcie",
+      href: "/tickets",
+      value: String(inProgressTicketCount),
+      description: "Aktualnie obsługiwane zgłoszenia",
+      icon: ListTodo,
+    },
+    {
+      title: "Przypisane do mnie",
+      href: "/tickets",
+      value: String(myTicketCount),
+      description: "Twoja kolejka ticketów",
+      icon: UserRound,
+    },
+    isAdmin
+      ? {
+          title: "Bez odpowiedzialnego",
+          href: "/tickets",
+          value: String(unassignedTicketCount),
+          description: "Wymagają przypisania",
+          icon: AlertTriangle,
+        }
+      : {
           title: "Tablice zespołu",
           href: "/boards",
           value: String(boardCount),
@@ -176,23 +227,7 @@ export default async function HomePage() {
             : "Brak przypisanego zespołu",
           icon: Columns3,
         },
-        {
-          title: "Moje zadania",
-          href: "/boards",
-          value: String(taskCount),
-          description: "Zadania przypisane do Ciebie",
-          icon: ListTodo,
-        },
-        {
-          title: "Zespół",
-          href: "/users",
-          value: String(userCount),
-          description: teamId
-            ? `Osoby w zespole ${session.user.teamName}`
-            : "Tylko Twoje konto",
-          icon: Users,
-        },
-      ];
+  ];
 
   const taskStats = isAdmin
     ? [
@@ -212,7 +247,7 @@ export default async function HomePage() {
         },
         {
           title: "Bez załogi",
-          value: unassignedCount,
+          value: unassignedTaskCount,
           description: "Nieprzypisane do nikogo",
           icon: Users,
           tone: "text-foreground",
@@ -265,24 +300,28 @@ export default async function HomePage() {
           </h2>
           <p className="text-sm text-muted-foreground">
             {isAdmin
-              ? "Pełny przegląd tablic, zadań i zespołów."
-              : "Twój osobisty skrót: zadania i tablice zespołu."}
+              ? "Skrót HelpDesk: tickety, zadania i zespoły."
+              : "Twoje tickety zespołu oraz przypisane zadania."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button render={<Link href="/tickets" />}>
+            <Ticket />
+            Tickety
+          </Button>
           {isAdmin ? (
             <>
               <Button variant="outline" render={<Link href="/boards" />}>
                 <Plus />
                 Nowa tablica
               </Button>
-              <Button render={<Link href="/tasks" />}>
+              <Button variant="outline" render={<Link href="/tasks" />}>
                 <Plus />
                 Nowe zadanie
               </Button>
             </>
           ) : (
-            <Button render={<Link href="/boards" />}>
+            <Button variant="outline" render={<Link href="/boards" />}>
               <Plus />
               Przejdź do tablic
             </Button>
@@ -290,8 +329,8 @@ export default async function HomePage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {overviewStats.map((stat) => (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {ticketOverviewStats.map((stat) => (
           <Card
             key={stat.title}
             className="shadow-sm transition-all hover:shadow-md"
@@ -323,6 +362,75 @@ export default async function HomePage() {
         <CardHeader>
           <CardTitle>
             <Link
+              href="/tickets"
+              className="underline-offset-4 hover:underline"
+            >
+              Tickety
+            </Link>
+          </CardTitle>
+          <CardDescription>
+            {isAdmin
+              ? "Ostatnia aktywność we wszystkich zgłoszeniach."
+              : "Ostatnia aktywność w ticketach Twojego zespołu."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="destructive">Otwarte: {openTicketCount}</Badge>
+            <Badge>W trakcie: {inProgressTicketCount}</Badge>
+            <Badge variant="secondary">
+              Rozwiązane: {resolvedTicketCount}
+            </Badge>
+            <Badge variant="outline">Moje: {myTicketCount}</Badge>
+          </div>
+
+          {recentTickets.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Brak ticketów do wyświetlenia.
+            </p>
+          ) : (
+            <ul className="divide-y rounded-xl border">
+              {recentTickets.map((ticket) => (
+                <li key={ticket.id}>
+                  <Link
+                    href={`/tickets/${ticket.id}`}
+                    className="flex flex-col gap-2 px-3 py-2.5 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs font-semibold">
+                          {formatTicketId(ticket.number)}
+                        </span>
+                        <TicketStatusBadge status={ticket.status} />
+                        <PriorityBadge priority={ticket.priority} />
+                      </div>
+                      <p className="mt-1 truncate text-sm font-medium">
+                        {ticket.subject}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {ticket.assignee?.name ?? "Nieprzypisany"}
+                        {" · "}
+                        {formatTicketArrival(ticket.lastMessageAt)}
+                      </p>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div>
+            <Button variant="outline" size="sm" render={<Link href="/tickets" />}>
+              Wszystkie tickety
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <Link
               href={isAdmin ? "/tasks" : "/boards"}
               className="underline-offset-4 hover:underline"
             >
@@ -340,6 +448,9 @@ export default async function HomePage() {
             <Badge variant="destructive">Wysoki: {highPriorityCount}</Badge>
             <Badge variant="secondary">Średni: {mediumPriorityCount}</Badge>
             <Badge variant="outline">Niski: {lowPriorityCount}</Badge>
+            {isAdmin ? (
+              <Badge variant="outline">Wszystkie: {taskCount}</Badge>
+            ) : null}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -412,6 +523,9 @@ export default async function HomePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" render={<Link href="/tickets" />}>
+            Tickety
+          </Button>
           <Button variant="outline" size="sm" render={<Link href="/profile" />}>
             Profil
           </Button>
