@@ -238,6 +238,9 @@ export async function listTickets(
   const query = filters.q?.trim();
   const and: Prisma.TicketWhereInput[] = [];
 
+  // Merged source tickets stay in DB for email routing but leave the list.
+  and.push({ mergedIntoId: null });
+
   if (filters.status) {
     and.push({ status: filters.status });
   }
@@ -311,6 +314,11 @@ export async function getTicketDetails(ticketId: string) {
       team: { select: { id: true, name: true, inboundEmail: true } },
       assignee: { select: { id: true, name: true } },
       watchers: { select: { userId: true } },
+      mergedInto: { select: { id: true, number: true } },
+      mergedSources: {
+        select: { id: true, number: true },
+        orderBy: { number: "asc" },
+      },
       task: {
         select: {
           id: true,
@@ -330,6 +338,25 @@ export async function getTicketDetails(ticketId: string) {
       },
     },
   });
+}
+
+/** Follow mergedInto chain to the live primary ticket id. */
+export async function resolveMergedTicketId(ticketId: string) {
+  let currentId = ticketId;
+  for (let depth = 0; depth < 10; depth += 1) {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: currentId },
+      select: { id: true, mergedIntoId: true },
+    });
+    if (!ticket) {
+      return null;
+    }
+    if (!ticket.mergedIntoId) {
+      return ticket.id;
+    }
+    currentId = ticket.mergedIntoId;
+  }
+  return currentId;
 }
 
 const TODO_COLUMN_PATTERN = /^(do zrobienia|to\s*do|todo|backlog)$/i;

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { ArrowLeft, GitMerge } from "lucide-react";
 
 import { CreateTaskFromTicketForm } from "@/components/tickets/create-task-from-ticket-form";
 import { TicketConversation } from "@/components/tickets/ticket-conversation";
@@ -81,6 +81,10 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
     notFound();
   }
 
+  if (ticket.mergedIntoId) {
+    redirect(`/tickets/${ticket.mergedIntoId}`);
+  }
+
   const isAdmin = session.user.isAdmin;
   const isRestricted = session.user.isRestricted;
   const [teams, boards, members] = await Promise.all([
@@ -110,6 +114,10 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
   ]);
 
   const displayId = formatTicketId(ticket.number);
+  const mergeLabels = [
+    displayId,
+    ...ticket.mergedSources.map((source) => formatTicketId(source.number)),
+  ];
   const allAttachments = ticket.messages.flatMap((message) =>
     message.attachments.map((attachment) => ({
       id: attachment.id,
@@ -143,6 +151,15 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
               <TicketStatusBadge status={ticket.status} />
               <PriorityBadge priority={ticket.priority} />
             </div>
+            {ticket.mergedSources.length > 0 ? (
+              <p className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm text-foreground">
+                <GitMerge className="size-3.5 shrink-0 text-primary" />
+                <span className="font-medium">Połączenie:</span>
+                <span className="font-mono text-xs sm:text-sm">
+                  {mergeLabels.join(" · ")}
+                </span>
+              </p>
+            ) : null}
             <p className="rounded-lg border border-border/70 bg-background/80 px-3 py-2 text-lg font-medium dark:bg-background/40">
               {ticket.subject}
             </p>

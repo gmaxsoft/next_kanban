@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { requireAdmin, requireAuth } from "@/lib/auth-utils";
+import {
+  requireAdmin,
+  requireAuth,
+  requireUnrestrictedAuth,
+} from "@/lib/auth-utils";
 import {
   absoluteAppUrl,
   sendTeamNotificationEmail,
@@ -1037,4 +1041,145 @@ export async function createTaskFromTicket(
   revalidatePath(`/tickets/${ticket.id}`);
   revalidatePath(`/boards/${board.id}`);
   redirect(taskPath(board.id, task.id));
+}
+
+export type MergeTicketsResult = {
+  error?: string;
+  success?: string;
+  primaryTicketId?: string;
+};
+
+export async function mergeTickets(input: {
+  primaryTicketId: string;
+  sourceTicketIds: string[];
+}): Promise<MergeTicketsResult> {
+  const session = await requireUnrestrictedAuth();
+
+  const primaryTicketId = String(input.primaryTicketId ?? "").trim();
+  const sourceTicketIds = [
+    ...new Set(
+      (input.sourceTicketIds ?? [])
+        .map((id) => String(id).trim())
+        .filter(Boolean),
+    ),
+  ].filter((id) => id !== primaryTicketId);
+
+  if (!primaryTicketId || sourceTicketIds.length === 0) {
+    return { error: "Wybierz co najmniej dwa tickety i ticket główny." };
+  }
+
+  const allIds = [primaryTicketId, ...sourceTicketIds];
+  const tickets = await prisma.ticket.findMany({
+    where: { id: { in: allIds } },
+    select: {
+      id: true,
+      number: true,
+      teamId: true,
+      taskId: true,
+      mergedIntoId: true,
+      watchers: { select: { userId: true } },
+    },
+  });
+
+  if (tickets.length !== allIds.length) {
+    return { error: "Nie znaleziono wszystkich wybranych ticketów." };
+  }
+
+  const alreadyMerged = tickets.filter((ticket) => ticket.mergedIntoId);
+  if (alreadyMerged.length > 0) {
+    return {
+      error: "Jeden z wybranych ticketów jest już scalony z innym zgłoszeniem.",
+    };
+  }
+
+  if (!session.user.isAdmin) {
+    const unauthorized = tickets.some(
+      (ticket) => ticket.teamId !== session.user.teamId,
+    );
+    if (unauthorized) {
+      return { error: "Nie masz dostępu do wszystkich wybranych ticketów." };
+    }
+  }
+
+  const primary = tickets.find((ticket) => ticket.id === primaryTicketId)!;
+  const sources = tickets.filter((ticket) => ticket.id !== primaryTicketId);
+  const sourceLabels = sources
+    .map((ticket) => formatTicketId(ticket.number))
+    .sort();
+
+  const primaryWatcherIds = new Set(
+    primary.watchers.map((watcher) => watcher.userId),
+  );
+  const watchersToAdd = [
+    ...new Set(
+      sources.flatMap((ticket) =>
+        ticket.watchers.map((watcher) => watcher.userId),
+      ),
+    ),
+  ].filter((userId) => !primaryWatcherIds.has(userId));
+
+  let taskIdToMove: string | null = null;
+  if (!primary.taskId) {
+    const sourceWithTask = sources.find((ticket) => ticket.taskId);
+    if (sourceWithTask?.taskId) {
+      taskIdToMove = sourceWithTask.taskId;
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.ticketMessage.updateMany({
+      where: { ticketId: { in: sourceTicketIds } },
+      data: { ticketId: primaryTicketId },
+    });
+
+    if (watchersToAdd.length > 0) {
+      await tx.ticketWatcher.createMany({
+        data: watchersToAdd.map((userId) => ({
+          ticketId: primaryTicketId,
+          userId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    for (const source of sources) {
+      await tx.ticket.update({
+        where: { id: source.id },
+        data: {
+          mergedIntoId: primaryTicketId,
+          status: "RESOLVED",
+          taskId: null,
+        },
+      });
+    }
+
+    await tx.ticket.update({
+      where: { id: primaryTicketId },
+      data: {
+        lastMessageAt: new Date(),
+        ...(taskIdToMove ? { taskId: taskIdToMove } : {}),
+      },
+    });
+
+    await tx.ticketMessage.create({
+      data: {
+        ticketId: primaryTicketId,
+        kind: "INTERNAL",
+        bodyText: `Scalono tickety ${sourceLabels.join(", ")} do tego zgłoszenia (${formatTicketId(primary.number)}).`,
+        authorId: session.user.id,
+        fromName: session.user.name ?? "System",
+      },
+    });
+  });
+
+  revalidatePath("/tickets");
+  revalidatePath(`/tickets/${primaryTicketId}`);
+  for (const sourceId of sourceTicketIds) {
+    revalidatePath(`/tickets/${sourceId}`);
+  }
+
+  return {
+    success: `Scalono ${sourceLabels.join(", ")} do ${formatTicketId(primary.number)}.`,
+    primaryTicketId,
+  };
 }

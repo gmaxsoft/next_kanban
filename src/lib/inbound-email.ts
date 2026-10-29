@@ -376,10 +376,40 @@ export async function processIncomingEmail(
     "(brak treści)";
 
   if (ticketNumber) {
-    const ticket = await prisma.ticket.findUnique({
+    const matchedByNumber = await prisma.ticket.findUnique({
       where: { number: ticketNumber },
-      select: { id: true, status: true, statusLocked: true },
+      select: {
+        id: true,
+        status: true,
+        statusLocked: true,
+        mergedIntoId: true,
+      },
     });
+
+    let ticket = matchedByNumber;
+    if (matchedByNumber?.mergedIntoId) {
+      let currentId = matchedByNumber.mergedIntoId;
+      for (let depth = 0; depth < 10; depth += 1) {
+        const next = await prisma.ticket.findUnique({
+          where: { id: currentId },
+          select: {
+            id: true,
+            status: true,
+            statusLocked: true,
+            mergedIntoId: true,
+          },
+        });
+        if (!next) {
+          ticket = null;
+          break;
+        }
+        if (!next.mergedIntoId) {
+          ticket = next;
+          break;
+        }
+        currentId = next.mergedIntoId;
+      }
+    }
 
     if (ticket) {
       const [createdMessage] = await prisma.$transaction([
