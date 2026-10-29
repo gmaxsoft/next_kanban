@@ -123,41 +123,50 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-fit px-0"
-            render={<Link href="/tickets" />}
-          >
-            <ArrowLeft />
-            Wszystkie tickety
-          </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="font-mono text-2xl font-semibold tracking-tight">
-              {displayId}
-            </h2>
-            <TicketStatusBadge status={ticket.status} />
-            <PriorityBadge priority={ticket.priority} />
-          </div>
-          <p className="text-lg font-medium">{ticket.subject}</p>
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium">Zgłaszający:</span>{" "}
-            {ticket.requestedBy ?? ticket.requesterName ?? ticket.requesterEmail}
-            {ticket.requesterEmail !== ticket.requestedBy
-              ? ` · ${ticket.requesterEmail}`
-              : null}
-            {ticket.team ? ` · zespół ${ticket.team.name}` : null}
-          </p>
-        </div>
+      <div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-3 w-fit px-0"
+          render={<Link href="/tickets" />}
+        >
+          <ArrowLeft />
+          Wszystkie tickety
+        </Button>
 
-        <div className="flex flex-col gap-3 sm:items-end">
-          <TicketStatusForm ticketId={ticket.id} status={ticket.status} />
-          <TicketPriorityForm
-            ticketId={ticket.id}
-            priority={ticket.priority}
-          />
+        <div className="flex flex-col gap-4 rounded-xl border border-border bg-muted/30 p-4 shadow-xs sm:flex-row sm:items-start sm:justify-between dark:bg-muted/20">
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-mono text-2xl font-semibold tracking-tight">
+                {displayId}
+              </h2>
+              <TicketStatusBadge status={ticket.status} />
+              <PriorityBadge priority={ticket.priority} />
+            </div>
+            <p className="rounded-lg border border-border/70 bg-background/80 px-3 py-2 text-lg font-medium dark:bg-background/40">
+              {ticket.subject}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground/80">
+                Zgłaszający:
+              </span>{" "}
+              {ticket.requestedBy ??
+                ticket.requesterName ??
+                ticket.requesterEmail}
+              {ticket.requesterEmail !== ticket.requestedBy
+                ? ` · ${ticket.requesterEmail}`
+                : null}
+              {ticket.team ? ` · zespół ${ticket.team.name}` : null}
+            </p>
+          </div>
+
+          <div className="flex w-full flex-col gap-3 rounded-lg border border-border bg-background/80 p-3 sm:w-auto sm:min-w-52 dark:bg-background/40">
+            <TicketStatusForm ticketId={ticket.id} status={ticket.status} />
+            <TicketPriorityForm
+              ticketId={ticket.id}
+              priority={ticket.priority}
+            />
+          </div>
         </div>
       </div>
 
@@ -247,19 +256,22 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="overflow-visible">
         <CardHeader>
           <CardTitle>Historia konwersacji</CardTitle>
           <CardDescription>
             E-maile przychodzące, odpowiedzi oraz notatki wewnętrzne.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-visible">
           <TicketConversation
             currentUserId={session.user.id}
             isAdmin={isAdmin}
             members={members
-              .filter((member) => ticket.teamId && member.teamId === ticket.teamId)
+              .filter(
+                (member) =>
+                  !ticket.teamId || member.teamId === ticket.teamId,
+              )
               .map(({ id, name }) => ({ id, name }))}
             messages={ticket.messages.map((message) => ({
               id: message.id,
@@ -288,7 +300,9 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
       <TicketReplyForm
         ticketId={ticket.id}
         members={members
-          .filter((member) => ticket.teamId && member.teamId === ticket.teamId)
+          .filter(
+            (member) => !ticket.teamId || member.teamId === ticket.teamId,
+          )
           .map(({ id, name }) => ({ id, name }))}
       />
     </div>

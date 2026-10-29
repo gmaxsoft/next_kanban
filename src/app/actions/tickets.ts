@@ -578,6 +578,10 @@ export async function editTicketInternalNote(
   const session = await requireAuth();
   const messageId = String(formData.get("messageId") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
+  const explicitMentionIds = formData
+    .getAll("mentionedIds")
+    .map(String)
+    .filter(Boolean);
 
   if (!messageId || !body) {
     return { error: "Wpisz tresc notatki." };
@@ -589,7 +593,25 @@ export async function editTicketInternalNote(
       id: true,
       kind: true,
       authorId: true,
-      ticket: { select: { id: true, teamId: true } },
+      mentions: { select: { userId: true } },
+      ticket: {
+        select: {
+          id: true,
+          number: true,
+          subject: true,
+          teamId: true,
+          assigneeId: true,
+          watchers: { select: { userId: true } },
+          team: {
+            select: {
+              inboundEmail: true,
+              imapHost: true,
+              imapUser: true,
+              imapPassword: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -607,13 +629,138 @@ export async function editTicketInternalNote(
     return { error: "Mozesz edytowac tylko swoje notatki." };
   }
 
-  await prisma.ticketMessage.update({
+  const teamMembers = message.ticket.teamId
+    ? await prisma.user.findMany({
+        where: { isActive: true, teamId: message.ticket.teamId },
+        select: { id: true, name: true, email: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+  const mentionedIds = extractMentionedUserIds(
+    body,
+    teamMembers,
+    explicitMentionIds,
+  );
+  const previousMentionIds = new Set(
+    message.mentions.map((mention) => mention.userId),
+  );
+  const newlyMentionedIds = mentionedIds.filter(
+    (userId) => !previousMentionIds.has(userId),
+  );
+
+  await prisma.$transaction([
+    prisma.ticketMessageMention.deleteMany({ where: { messageId } }),
+    prisma.ticketMessage.update({
+      where: { id: messageId },
+      data: {
+        bodyText: body.slice(0, 10000),
+        mentions:
+          mentionedIds.length > 0
+            ? { create: mentionedIds.map((userId) => ({ userId })) }
+            : undefined,
+      },
+    }),
+  ]);
+
+  const ticket = message.ticket;
+  const displayId = formatTicketId(ticket.number);
+  const newlyMentionedMembers = teamMembers.filter(
+    (member) =>
+      newlyMentionedIds.includes(member.id) && member.id !== session.user.id,
+  );
+  const href = ticketUrl(ticket.id);
+
+  if (newlyMentionedMembers.length > 0) {
+    await createNotifications(
+      newlyMentionedMembers.map((member) => member.id),
+      {
+        title: `Wspomniano Cię · ${displayId}`,
+        body: `${session.user.name ?? "Członek zespołu"}: ${body.slice(0, 120)}`,
+        href,
+      },
+    );
+  }
+
+  const team = ticket.team;
+  if (
+    newlyMentionedMembers.length > 0 &&
+    team?.inboundEmail &&
+    team.imapHost?.startsWith("imap.") &&
+    team.imapUser &&
+    team.imapPassword
+  ) {
+    const emailResults = await Promise.allSettled(
+      newlyMentionedMembers.map((member) =>
+        sendTeamNotificationEmail({
+          toEmail: member.email,
+          recipientName: member.name,
+          inboundEmail: team.inboundEmail!,
+          smtpHost: team.imapHost!.replace(/^imap\./i, "smtp."),
+          smtpUser: team.imapUser!,
+          smtpPassword: team.imapPassword!,
+          subject: `Wspomniano Cię w zgłoszeniu ${displayId}`,
+          body: `${session.user.name ?? "Członek zespołu"} wspomniał(a) Cię w notatce zgłoszenia ${displayId} („${ticket.subject}”):\n\n${body.slice(0, 500)}`,
+          actionUrl: absoluteAppUrl(href),
+          actionLabel: "Otwórz zgłoszenie",
+          ticketDisplayId: displayId,
+          ticketSubject: ticket.subject,
+        }),
+      ),
+    );
+    emailResults.forEach((result, index) => {
+      if (result.status === "rejected") {
+        console.error(
+          "[tickets] mention email failed",
+          newlyMentionedMembers[index]?.email,
+          result.reason,
+        );
+      }
+    });
+  }
+
+  revalidatePath(`/tickets/${ticket.id}`);
+  return { success: "Zapisano zmiany notatki." };
+}
+
+export async function deleteTicketInternalNote(
+  _prev: TicketActionState,
+  formData: FormData,
+): Promise<TicketActionState> {
+  const session = await requireAuth();
+  const messageId = String(formData.get("messageId") ?? "").trim();
+
+  if (!messageId) {
+    return { error: "Brak notatki." };
+  }
+
+  const message = await prisma.ticketMessage.findUnique({
     where: { id: messageId },
-    data: { bodyText: body.slice(0, 10000) },
+    select: {
+      id: true,
+      kind: true,
+      authorId: true,
+      ticket: { select: { id: true } },
+    },
   });
 
+  if (!message || message.kind !== "INTERNAL") {
+    return { error: "Nie znaleziono notatki wewnętrznej." };
+  }
+
+  const denied = await denyUnlessTicketAccess(message.ticket.id, session.user);
+  if (denied) {
+    return denied;
+  }
+
+  if (!session.user.isAdmin && message.authorId !== session.user.id) {
+    return { error: "Możesz usuwać tylko swoje notatki." };
+  }
+
+  await prisma.ticketMessage.delete({ where: { id: messageId } });
+
+  revalidatePath("/tickets");
   revalidatePath(`/tickets/${message.ticket.id}`);
-  return { success: "Zapisano zmiany notatki." };
+  return { success: "Usunięto notatkę wewnętrzną." };
 }
 
 export async function replyToTicket(

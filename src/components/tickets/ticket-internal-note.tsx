@@ -3,11 +3,13 @@
 import { useActionState, useEffect, useState } from "react";
 
 import {
+  deleteTicketInternalNote,
   editTicketInternalNote,
   type TicketActionState,
 } from "@/app/actions/tickets";
+import { MentionTextarea } from "@/components/mentions/mention-textarea";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { useActionToast } from "@/hooks/use-action-toast";
 import {
   renderCommentWithMentions,
@@ -29,10 +31,14 @@ export function TicketInternalNote({
     TicketActionState,
     FormData
   >(editTicketInternalNote, null);
+  const [deleteState, deleteAction, deletePending] = useActionState<
+    TicketActionState,
+    FormData
+  >(deleteTicketInternalNote, null);
   const [editing, setEditing] = useState(false);
-  const [body, setBody] = useState(bodyText);
 
   useActionToast(state);
+  useActionToast(deleteState);
 
   useEffect(() => {
     if (state?.success) setEditing(false);
@@ -59,18 +65,28 @@ export function TicketInternalNote({
       <div>
         <p className="whitespace-pre-wrap text-sm leading-6">{renderedBody()}</p>
         {canEdit ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="mt-2 h-7 px-2 text-xs"
-            onClick={() => {
-              setBody(bodyText);
-              setEditing(true);
-            }}
-          >
-            Edytuj notatke
-          </Button>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="w-fit"
+              onClick={() => setEditing(true)}
+            >
+              Edytuj notatkę
+            </Button>
+            <ConfirmDeleteDialog
+              title="Usunąć notatkę wewnętrzną?"
+              description="Czy na pewno chcesz usunąć tę notatkę wewnętrzną? Tej operacji nie można cofnąć."
+              confirmLabel="Usuń"
+              triggerLabel="Usuń"
+              triggerVariant="default"
+              triggerSize="sm"
+              pending={deletePending}
+              formAction={deleteAction}
+              hiddenFields={{ messageId }}
+              closeOnSuccess={deleteState}
+            />
+          </div>
         ) : null}
       </div>
     );
@@ -79,27 +95,25 @@ export function TicketInternalNote({
   return (
     <form action={formAction} className="grid gap-2">
       <input type="hidden" name="messageId" value={messageId} />
-      <Textarea
+      <MentionTextarea
         name="body"
-        value={body}
         required
-        maxLength={10000}
         rows={4}
-        onChange={(event) => setBody(event.target.value)}
+        members={members}
+        defaultValue={bodyText}
+        placeholder="Notatka dla zespołu… użyj @, aby oznaczyć osobę"
       />
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="sm" disabled={pending} className="w-fit">
           {pending ? "Zapisywanie..." : "Zapisz zmiany"}
         </Button>
         <Button
           type="button"
           size="sm"
-          variant="ghost"
+          variant="secondary"
           disabled={pending}
-          onClick={() => {
-            setBody(bodyText);
-            setEditing(false);
-          }}
+          className="w-fit"
+          onClick={() => setEditing(false)}
         >
           Anuluj
         </Button>

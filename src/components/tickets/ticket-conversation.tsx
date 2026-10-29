@@ -74,7 +74,7 @@ export function TicketConversation({
           <li
             key={message.id}
             className={cn(
-              "rounded-xl border p-4",
+              "relative overflow-visible rounded-xl border p-4",
               message.kind === "INTERNAL" && "border-dashed bg-muted/30",
               message.kind === "OUTBOUND" && "border-primary/30 bg-primary/5",
             )}

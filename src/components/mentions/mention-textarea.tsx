@@ -15,6 +15,7 @@ export function MentionTextarea({
   rows = 5,
   required,
   maxLength = 10000,
+  defaultValue = "",
   resetKey,
   className,
 }: {
@@ -25,20 +26,24 @@ export function MentionTextarea({
   rows?: number;
   required?: boolean;
   maxLength?: number;
-  /** Change this after a successful submit to clear the field. */
+  /** Initial text (e.g. when editing an existing note). */
+  defaultValue?: string;
+  /** Change this after a successful submit to reset the field. */
   resetKey?: string | number | boolean | null;
   className?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(defaultValue);
   const [mentionedIds, setMentionedIds] = useState<string[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
-    setContent("");
+    setContent(defaultValue);
     setMentionedIds([]);
     setMentionQuery(null);
+    // resetKey drives intentional resets; defaultValue is the restore target
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
   const suggestions = useMemo(() => {
@@ -167,33 +172,39 @@ export function MentionTextarea({
         }}
       />
 
-      {mentionQuery !== null && suggestions.length > 0 ? (
-        <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-72 w-full overflow-y-auto rounded-lg border bg-popover p-1 shadow-md sm:max-w-sm">
-          {suggestions.map((member, index) => (
-            <li key={member.id}>
-              <button
-                type="button"
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-                  index === activeIndex ? "bg-muted" : "hover:bg-muted/70"
-                }`}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  insertMention(member);
-                }}
-              >
-                <Avatar size="sm" className="size-6">
-                  <AvatarImage
-                    src={member.avatarUrl ?? undefined}
-                    alt={member.name}
-                  />
-                  <AvatarFallback className="text-[9px]">
-                    {getInitials(member.name)}
-                  </AvatarFallback>
-                </Avatar>
-                <span>{member.name}</span>
-              </button>
+      {mentionQuery !== null ? (
+        <ul className="absolute top-full left-0 z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md sm:max-w-sm">
+          {suggestions.length === 0 ? (
+            <li className="px-2 py-1.5 text-sm text-muted-foreground">
+              Brak użytkowników do wzmianki
             </li>
-          ))}
+          ) : (
+            suggestions.map((member, index) => (
+              <li key={member.id}>
+                <button
+                  type="button"
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
+                    index === activeIndex ? "bg-muted" : "hover:bg-muted/70"
+                  }`}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    insertMention(member);
+                  }}
+                >
+                  <Avatar size="sm" className="size-6">
+                    <AvatarImage
+                      src={member.avatarUrl ?? undefined}
+                      alt={member.name}
+                    />
+                    <AvatarFallback className="text-[9px]">
+                      {getInitials(member.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span>{member.name}</span>
+                </button>
+              </li>
+            ))
+          )}
         </ul>
       ) : null}
     </div>
