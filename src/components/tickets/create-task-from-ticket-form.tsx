@@ -97,10 +97,10 @@ export function CreateTaskFromTicketForm({
         </form>
       ) : null}
 
-      <form action={createAction} className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+      <form action={createAction} className="grid max-w-3xl gap-3 sm:grid-cols-2 sm:items-start">
         <input type="hidden" name="ticketId" value={ticketId} />
         <input type="hidden" name="teamId" value={teamId} />
-        <div className="grid gap-2 sm:max-w-md">
+        <div className="grid gap-2">
           <Label htmlFor="ticket-task-requested-by">Zgłaszający</Label>
           <input
             id="ticket-task-requested-by"
@@ -131,7 +131,7 @@ export function CreateTaskFromTicketForm({
             )}
           </select>
         </div>
-        <div className="grid gap-2 sm:max-w-md">
+        <div className="grid gap-2">
           <Label htmlFor="ticket-task-assignee">Odpowiedzialny</Label>
           <select
             id="ticket-task-assignee"
@@ -147,7 +147,7 @@ export function CreateTaskFromTicketForm({
         </div>
         <fieldset className="grid gap-2">
           <legend className="text-sm font-medium">Obserwujący</legend>
-          <div className="grid max-h-32 gap-2 overflow-y-auto rounded-md border p-2 sm:max-w-md">
+          <div className="grid max-h-32 gap-2 overflow-y-auto rounded-md border p-2">
             {memberOptions.map((member) => (
               <label key={member.id} className="flex items-center gap-2 text-sm">
                 <input
@@ -162,9 +162,14 @@ export function CreateTaskFromTicketForm({
             ))}
           </div>
         </fieldset>
-        <Button type="submit" disabled={createPending || boardOptions.length === 0}>
-          {createPending ? "Tworzenie..." : "Utwórz zadanie na tablicy Kanban"}
-        </Button>
+        <div className="sm:col-span-2">
+          <Button
+            type="submit"
+            disabled={createPending || boardOptions.length === 0}
+          >
+            {createPending ? "Tworzenie..." : "Utwórz zadanie na tablicy Kanban"}
+          </Button>
+        </div>
       </form>
     </div>
   );

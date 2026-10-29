@@ -12,7 +12,7 @@ import { useActionToast } from "@/hooks/use-action-toast";
 import { cn } from "@/lib/utils";
 
 const selectClassName =
-  "h-8 min-w-44 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+  "h-8 min-w-44 rounded-lg border border-border bg-muted/40 px-2.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/40";
 
 export function TicketStatusForm({
   ticketId,

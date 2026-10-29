@@ -13,7 +13,14 @@ const variants: Record<
 };
 
 export function TicketStatusBadge({ status }: { status: TicketStatus }) {
-  return <Badge variant={variants[status]}>{ticketStatusLabel(status)}</Badge>;
+  return (
+    <Badge
+      variant={variants[status]}
+      className="border border-border/60 shadow-xs"
+    >
+      {ticketStatusLabel(status)}
+    </Badge>
+  );
 }
 
 export { ticketStatusLabel } from "@/lib/ticket-status";
