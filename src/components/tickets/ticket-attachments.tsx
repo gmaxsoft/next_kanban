@@ -15,6 +15,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { formatFileSize } from "@/lib/chat-uploads";
+import { withoutEmailSignatureNoiseAttachments } from "@/lib/ticket-attachments";
 
 export type TicketAttachmentView = {
   id: string;
@@ -89,10 +90,14 @@ export function TicketAttachments({
   compact?: boolean;
 }) {
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const visibleAttachments =
+    withoutEmailSignatureNoiseAttachments(attachments);
 
-  if (attachments.length === 0) return null;
+  if (visibleAttachments.length === 0) return null;
 
-  const previewAttachment = attachments.find((item) => item.id === previewId);
+  const previewAttachment = visibleAttachments.find(
+    (item) => item.id === previewId,
+  );
 
   return (
     <section
@@ -101,10 +106,10 @@ export function TicketAttachments({
     >
       <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <Paperclip className="size-3.5" />
-        Załączniki ({attachments.length})
+        Załączniki ({visibleAttachments.length})
       </p>
       <ul className="grid gap-2">
-        {attachments.map((attachment) => {
+        {visibleAttachments.map((attachment) => {
           const Icon = attachmentIcon(
             attachment.mimeType,
             attachment.originalName,
@@ -275,7 +280,10 @@ export function TicketAttachmentsPanel({
 }: {
   attachments: TicketAttachmentView[];
 }) {
-  if (attachments.length === 0) {
+  const visibleAttachments =
+    withoutEmailSignatureNoiseAttachments(attachments);
+
+  if (visibleAttachments.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
         Brak załączników w tym tickecie.
@@ -283,5 +291,5 @@ export function TicketAttachmentsPanel({
     );
   }
 
-  return <TicketAttachments attachments={attachments} />;
+  return <TicketAttachments attachments={visibleAttachments} />;
 }

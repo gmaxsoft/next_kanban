@@ -3,6 +3,7 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { prisma } from "./prisma";
+import { isEmailSignatureNoiseAttachment } from "./ticket-attachments";
 
 const MAX_ATTACHMENT_FILES = 20;
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
@@ -50,6 +51,15 @@ export async function storeTicketAttachments(
   for (const attachment of attachments) {
     const content = Buffer.from(attachment.content);
     if (content.length === 0) continue;
+
+    if (
+      isEmailSignatureNoiseAttachment({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+      })
+    ) {
+      continue;
+    }
 
     if (
       storedCount >= MAX_ATTACHMENT_FILES ||
