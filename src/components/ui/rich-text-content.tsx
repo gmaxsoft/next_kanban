@@ -12,11 +12,13 @@ export function RichTextContent({
   className,
   excerpt,
   excerptLength = 120,
+  allowImages = false,
 }: {
   value?: string | null;
   className?: string;
   excerpt?: boolean;
   excerptLength?: number;
+  allowImages?: boolean;
 }) {
   if (!value || isEmptyRichText(value)) {
     return null;
@@ -39,7 +41,9 @@ export function RichTextContent({
   return (
     <div
       className={cn("prose-editor text-sm", className)}
-      dangerouslySetInnerHTML={{ __html: sanitizeRichText(value) }}
+      dangerouslySetInnerHTML={{
+        __html: sanitizeRichText(value, { allowImages }),
+      }}
     />
   );
 }

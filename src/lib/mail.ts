@@ -191,6 +191,7 @@ export async function sendTicketReplyEmail(input: {
   displayId: string;
   subject: string;
   body: string;
+  bodyHtml?: string;
   inboundEmail: string;
   smtpHost: string;
   smtpUser: string;
@@ -205,6 +206,7 @@ export async function sendTicketReplyEmail(input: {
       displayId: input.displayId,
       subject: input.subject,
       body: input.body,
+      bodyHtml: input.bodyHtml,
       ticketUrl: href,
     }),
   );

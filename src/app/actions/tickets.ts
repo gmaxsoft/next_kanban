@@ -17,7 +17,11 @@ import {
   ticketUrl,
 } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
-import { normalizeRichTextInput } from "@/lib/rich-text";
+import {
+  isEmptyRichText,
+  normalizeRichTextInput,
+  plainTextFromHtml,
+} from "@/lib/rich-text";
 import { notifyTicketParticipants } from "@/lib/ticket-notifications";
 import { extractMentionedUserIds } from "@/lib/mentions";
 import { createNotifications } from "@/lib/notifications";
@@ -429,13 +433,16 @@ export async function addTicketInternalNote(
 ): Promise<TicketActionState> {
   const session = await requireAuth();
   const ticketId = String(formData.get("ticketId") ?? "");
-  const body = String(formData.get("body") ?? "").trim();
+  const bodyHtml = normalizeRichTextInput(String(formData.get("body") ?? ""), {
+    allowImages: true,
+  });
+  const body = plainTextFromHtml(bodyHtml);
   const explicitMentionIds = formData
     .getAll("mentionedIds")
     .map(String)
     .filter(Boolean);
 
-  if (!ticketId || body.length < 1) {
+  if (!ticketId || isEmptyRichText(bodyHtml)) {
     return { error: "Wpisz treść notatki." };
   }
 
@@ -484,7 +491,8 @@ export async function addTicketInternalNote(
     data: {
       ticketId,
       kind: "INTERNAL",
-      bodyText: body.slice(0, 10000),
+      bodyText: (body || "(zdjęcie)").slice(0, 10000),
+      bodyHtml,
       authorId: session.user.id,
       fromName: session.user.name ?? "Administrator",
       mentions:
@@ -581,14 +589,17 @@ export async function editTicketInternalNote(
 ): Promise<TicketActionState> {
   const session = await requireAuth();
   const messageId = String(formData.get("messageId") ?? "").trim();
-  const body = String(formData.get("body") ?? "").trim();
+  const bodyHtml = normalizeRichTextInput(String(formData.get("body") ?? ""), {
+    allowImages: true,
+  });
+  const body = plainTextFromHtml(bodyHtml);
   const explicitMentionIds = formData
     .getAll("mentionedIds")
     .map(String)
     .filter(Boolean);
 
-  if (!messageId || !body) {
-    return { error: "Wpisz tresc notatki." };
+  if (!messageId || isEmptyRichText(bodyHtml)) {
+    return { error: "Wpisz treść notatki." };
   }
 
   const message = await prisma.ticketMessage.findUnique({
@@ -657,7 +668,8 @@ export async function editTicketInternalNote(
     prisma.ticketMessage.update({
       where: { id: messageId },
       data: {
-        bodyText: body.slice(0, 10000),
+        bodyText: (body || "(zdjęcie)").slice(0, 10000),
+        bodyHtml,
         mentions:
           mentionedIds.length > 0
             ? { create: mentionedIds.map((userId) => ({ userId })) }
@@ -773,9 +785,10 @@ export async function replyToTicket(
 ): Promise<TicketActionState> {
   const session = await requireAuth();
   const ticketId = String(formData.get("ticketId") ?? "");
-  const body = String(formData.get("body") ?? "").trim();
+  const bodyHtml = normalizeRichTextInput(String(formData.get("body") ?? ""));
+  const body = plainTextFromHtml(bodyHtml);
 
-  if (!ticketId || body.length < 1) {
+  if (!ticketId || isEmptyRichText(bodyHtml)) {
     return { error: "Wpisz treść odpowiedzi." };
   }
 
@@ -822,6 +835,7 @@ export async function replyToTicket(
       displayId,
       subject,
       body,
+      bodyHtml,
       inboundEmail: ticket.team.inboundEmail,
       smtpHost: ticket.team.imapHost.replace(/^imap\./i, "smtp."),
       smtpUser: ticket.team.imapUser,
@@ -840,6 +854,7 @@ export async function replyToTicket(
       fromName: session.user.name ?? "HelpDesk",
       subject,
       bodyText: body.slice(0, 10000),
+      bodyHtml,
       authorId: session.user.id,
     },
   });

@@ -7,23 +7,22 @@ import {
   editTicketInternalNote,
   type TicketActionState,
 } from "@/app/actions/tickets";
-import { MentionTextarea } from "@/components/mentions/mention-textarea";
 import { Button } from "@/components/ui/button";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
+import { RichTextContent } from "@/components/ui/rich-text-content";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { useActionToast } from "@/hooks/use-action-toast";
-import {
-  renderCommentWithMentions,
-  type MentionMember,
-} from "@/lib/mentions";
+import type { MentionMember } from "@/lib/mentions";
 
 export function TicketInternalNote({
   messageId,
   bodyText,
+  bodyHtml,
   canEdit,
-  members,
 }: {
   messageId: string;
   bodyText: string;
+  bodyHtml?: string | null;
   canEdit: boolean;
   members: MentionMember[];
 }) {
@@ -44,26 +43,22 @@ export function TicketInternalNote({
     if (state?.success) setEditing(false);
   }, [state]);
 
-  function renderedBody() {
-    return renderCommentWithMentions(bodyText || "(brak tresci)", members).map(
-      (part, index) =>
-        part.type === "mention" ? (
-          <span
-            key={`${part.value}-${index}`}
-            className="rounded bg-primary/10 px-0.5 font-medium text-primary"
-          >
-            {part.value}
-          </span>
-        ) : (
-          <span key={`${index}-${part.value.slice(0, 8)}`}>{part.value}</span>
-        ),
-    );
-  }
+  const displayValue = bodyHtml?.trim() ? bodyHtml : bodyText;
 
   if (!editing) {
     return (
       <div>
-        <p className="whitespace-pre-wrap text-sm leading-6">{renderedBody()}</p>
+        {displayValue ? (
+          <RichTextContent
+            value={displayValue}
+            allowImages
+            className="leading-6"
+          />
+        ) : (
+          <p className="text-sm leading-6 text-muted-foreground">
+            (brak treści)
+          </p>
+        )}
         {canEdit ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
@@ -95,13 +90,12 @@ export function TicketInternalNote({
   return (
     <form action={formAction} className="grid gap-2">
       <input type="hidden" name="messageId" value={messageId} />
-      <MentionTextarea
+      <RichTextEditor
         name="body"
-        required
-        rows={4}
-        members={members}
-        defaultValue={bodyText}
-        placeholder="Notatka dla zespołu… użyj @, aby oznaczyć osobę"
+        enableImages
+        defaultValue={displayValue}
+        placeholder="Notatka dla zespołu… wklej zdjęcie lub napisz @Imię"
+        minHeightClassName="min-h-32"
       />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="sm" disabled={pending} className="w-fit">

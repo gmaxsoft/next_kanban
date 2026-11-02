@@ -2,6 +2,7 @@ import { Button, Heading, Hr, Link, Text } from "react-email";
 
 import { EmailLayout } from "@/emails/layout";
 import { emailStyles as s } from "@/emails/styles";
+import { looksLikeHtml, sanitizeRichText } from "@/lib/rich-text";
 
 export function TicketReplyEmail({
   requesterName,
@@ -9,6 +10,7 @@ export function TicketReplyEmail({
   displayId,
   subject,
   body,
+  bodyHtml,
   ticketUrl,
 }: {
   requesterName: string;
@@ -16,8 +18,14 @@ export function TicketReplyEmail({
   displayId: string;
   subject: string;
   body: string;
+  bodyHtml?: string;
   ticketUrl: string;
 }) {
+  const htmlBody =
+    bodyHtml && looksLikeHtml(bodyHtml)
+      ? sanitizeRichText(bodyHtml)
+      : null;
+
   return (
     <EmailLayout preview={`Odpowiedź w zgłoszeniu ${displayId}: ${subject}`}>
       <Heading style={s.heading}>
@@ -37,7 +45,14 @@ export function TicketReplyEmail({
         </Link>
         : <span style={s.strong}>{subject}</span>
       </Text>
-      <Text style={s.quote}>{body}</Text>
+      {htmlBody ? (
+        <div
+          style={{ ...s.quote, whiteSpace: "normal" }}
+          dangerouslySetInnerHTML={{ __html: htmlBody }}
+        />
+      ) : (
+        <Text style={s.quote}>{body}</Text>
+      )}
       <Hr style={s.divider} />
       <Button href={ticketUrl} style={s.button}>
         Otwórz zgłoszenie {displayId}

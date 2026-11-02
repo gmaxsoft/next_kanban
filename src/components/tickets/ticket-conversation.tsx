@@ -2,6 +2,7 @@ import type { TicketMessageKind } from "@prisma/client";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { RichTextContent } from "@/components/ui/rich-text-content";
 import { TicketAttachments } from "@/components/tickets/ticket-attachments";
 import { TicketInternalNote } from "@/components/tickets/ticket-internal-note";
 import { getInitials } from "@/lib/user";
@@ -120,8 +121,14 @@ export function TicketConversation({
               <TicketInternalNote
                 messageId={message.id}
                 bodyText={message.bodyText ?? ""}
+                bodyHtml={message.bodyHtml}
                 canEdit={isAdmin || message.author?.id === currentUserId}
                 members={members}
+              />
+            ) : message.bodyHtml ? (
+              <RichTextContent
+                value={message.bodyHtml}
+                className="leading-6"
               />
             ) : (
               <p className="whitespace-pre-wrap text-sm leading-6">

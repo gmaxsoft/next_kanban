@@ -298,7 +298,9 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
               subject: message.subject,
               bodyText: message.bodyText,
               bodyHtml: message.bodyHtml
-                ? sanitizeRichText(message.bodyHtml)
+                ? sanitizeRichText(message.bodyHtml, {
+                    allowImages: message.kind === "INTERNAL",
+                  })
                 : null,
               createdAt: message.createdAt.toISOString(),
               author: message.author

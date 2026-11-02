@@ -1,5 +1,7 @@
 import DOMPurify from "isomorphic-dompurify";
 
+import { isSafeTicketNoteImageSrc } from "@/lib/ticket-note-images";
+
 const ALLOWED_TAGS = [
   "p",
   "br",
@@ -22,6 +24,23 @@ const ALLOWED_TAGS = [
 
 const ALLOWED_ATTR = ["href", "target", "rel", "class"];
 
+export type SanitizeRichTextOptions = {
+  allowImages?: boolean;
+};
+
+function stripUnsafeImages(html: string) {
+  return html.replace(/<img\b[^>]*>/gi, (tag) => {
+    const srcMatch = tag.match(/\bsrc\s*=\s*(["'])(.*?)\1/i);
+    const src = srcMatch?.[2]?.trim() ?? "";
+    if (!isSafeTicketNoteImageSrc(src)) {
+      return "";
+    }
+    const altMatch = tag.match(/\balt\s*=\s*(["'])(.*?)\1/i);
+    const alt = (altMatch?.[2] ?? "").replace(/[<>&"]/g, "");
+    return `<img src="${src}" alt="${alt}">`;
+  });
+}
+
 export function looksLikeHtml(value: string) {
   return /<\/?[a-z][\s\S]*>/i.test(value);
 }
@@ -32,18 +51,33 @@ export function isEmptyRichText(value: string | null | undefined) {
   }
 
   const text = plainTextFromHtml(value);
-  return text.length === 0;
+  if (text.length > 0) {
+    return false;
+  }
+
+  return !/<img\b/i.test(value);
 }
 
-export function sanitizeRichText(html: string) {
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
+export function sanitizeRichText(
+  html: string,
+  options: SanitizeRichTextOptions = {},
+) {
+  const allowImages = Boolean(options.allowImages);
+  const cleaned = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: allowImages ? [...ALLOWED_TAGS, "img"] : ALLOWED_TAGS,
+    ALLOWED_ATTR: allowImages
+      ? [...ALLOWED_ATTR, "src", "alt"]
+      : ALLOWED_ATTR,
     ALLOW_DATA_ATTR: false,
   }).trim();
+
+  return allowImages ? stripUnsafeImages(cleaned).trim() : cleaned;
 }
 
-export function normalizeRichTextInput(value: string) {
+export function normalizeRichTextInput(
+  value: string,
+  options: SanitizeRichTextOptions = {},
+) {
   const trimmed = value.trim();
   if (!trimmed || isEmptyRichText(trimmed)) {
     return "";
@@ -59,10 +93,11 @@ export function normalizeRichTextInput(value: string) {
         .split(/\n{2,}/)
         .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br>")}</p>`)
         .join(""),
+      options,
     );
   }
 
-  return sanitizeRichText(trimmed);
+  return sanitizeRichText(trimmed, options);
 }
 
 export function plainTextFromHtml(value: string) {

@@ -1,23 +1,21 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 
 import {
   addTicketInternalNote,
   replyToTicket,
   type TicketActionState,
 } from "@/app/actions/tickets";
-import { MentionTextarea } from "@/components/mentions/mention-textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { useActionToast } from "@/hooks/use-action-toast";
 
 export type TicketMentionMember = { id: string; name: string };
 
 export function TicketReplyForm({
   ticketId,
-  members,
 }: {
   ticketId: string;
   members: TicketMentionMember[];
@@ -30,9 +28,23 @@ export function TicketReplyForm({
     TicketActionState,
     FormData
   >(addTicketInternalNote, null);
+  const [replyEditorKey, setReplyEditorKey] = useState(0);
+  const [noteEditorKey, setNoteEditorKey] = useState(0);
 
   useActionToast(replyState);
   useActionToast(noteState);
+
+  useEffect(() => {
+    if (replyState?.success) {
+      setReplyEditorKey((key) => key + 1);
+    }
+  }, [replyState]);
+
+  useEffect(() => {
+    if (noteState?.success) {
+      setNoteEditorKey((key) => key + 1);
+    }
+  }, [noteState]);
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -46,12 +58,12 @@ export function TicketReplyForm({
         </div>
         <div className="grid gap-2">
           <Label htmlFor="reply-body">Treść</Label>
-          <Textarea
+          <RichTextEditor
+            key={replyEditorKey}
             id="reply-body"
             name="body"
-            required
-            rows={5}
             placeholder="Dziękujemy za zgłoszenie..."
+            minHeightClassName="min-h-40"
           />
         </div>
         <Button type="submit" disabled={replyPending} className="w-fit">
@@ -64,20 +76,20 @@ export function TicketReplyForm({
         <div>
           <h3 className="text-sm font-semibold">Notatka wewnętrzna</h3>
           <p className="text-xs text-muted-foreground">
-            Widoczna tylko w panelu — bez wysyłki do klienta. Użyj @, aby
-            oznaczyć osobę (dostanie powiadomienie).
+            Widoczna tylko w panelu — bez wysyłki do klienta. Możesz wkleić
+            zdjęcie (Ctrl+V) lub dodać je z paska. Użyj @Imię, aby oznaczyć
+            osobę.
           </p>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="note-body">Treść</Label>
-          <MentionTextarea
+          <RichTextEditor
+            key={noteEditorKey}
             id="note-body"
             name="body"
-            required
-            rows={5}
-            members={members}
-            placeholder="Notatka dla zespołu… użyj @, aby oznaczyć osobę"
-            resetKey={noteState?.success}
+            enableImages
+            placeholder="Notatka dla zespołu… wklej zdjęcie lub napisz @Imię"
+            minHeightClassName="min-h-40"
           />
         </div>
         <Button
