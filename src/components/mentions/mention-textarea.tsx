@@ -32,11 +32,15 @@ export function MentionTextarea({
   resetKey?: string | number | boolean | null;
   className?: string;
 }) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [content, setContent] = useState(defaultValue);
   const [mentionedIds, setMentionedIds] = useState<string[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [mentionPlacement, setMentionPlacement] = useState<"below" | "above">(
+    "below",
+  );
 
   useEffect(() => {
     setContent(defaultValue);
@@ -57,6 +61,20 @@ export function MentionTextarea({
     );
   }, [members, mentionQuery]);
 
+  function updateMentionPlacement() {
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+    const rect = root.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const menuHeight = 288;
+    setMentionPlacement(
+      spaceBelow < menuHeight && spaceAbove > spaceBelow ? "above" : "below",
+    );
+  }
+
   function syncMentionState(value: string, caret: number) {
     const before = value.slice(0, caret);
     const match = before.match(/(^|[\s([{"'])@([^\s@]*)$/);
@@ -68,6 +86,7 @@ export function MentionTextarea({
 
     setMentionQuery(match[2] ?? "");
     setActiveIndex(0);
+    updateMentionPlacement();
   }
 
   function insertMention(member: BoardMember) {
@@ -103,7 +122,7 @@ export function MentionTextarea({
   }
 
   return (
-    <div className={`relative ${className ?? ""}`}>
+    <div ref={rootRef} className={`relative ${className ?? ""}`}>
       {mentionedIds.map((memberId) => (
         <input
           key={memberId}
@@ -173,7 +192,13 @@ export function MentionTextarea({
       />
 
       {mentionQuery !== null ? (
-        <ul className="absolute top-full left-0 z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md sm:max-w-sm">
+        <ul
+          className={`absolute left-0 z-50 max-h-72 w-full overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md sm:max-w-sm ${
+            mentionPlacement === "above"
+              ? "bottom-full mb-1"
+              : "top-full mt-1"
+          }`}
+        >
           {suggestions.length === 0 ? (
             <li className="px-2 py-1.5 text-sm text-muted-foreground">
               Brak użytkowników do wzmianki

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
@@ -21,13 +21,22 @@ import {
   Undo2,
 } from "lucide-react";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
+import {
+  filterMentionMembers,
+  getActiveMentionQuery,
+  insertEditorMention,
+  type ActiveMentionQuery,
+  type EditorMentionMember,
+} from "@/lib/editor-mentions";
 import {
   looksLikeHtml,
   normalizeRichTextInput,
   type SanitizeRichTextOptions,
 } from "@/lib/rich-text";
+import { getInitials } from "@/lib/user";
 
 function toEditorContent(value?: string) {
   if (!value?.trim()) {
@@ -99,6 +108,7 @@ export function RichTextEditor({
   minHeightClassName = "min-h-36",
   enableImages = false,
   resetKey,
+  members = [],
 }: {
   name: string;
   id?: string;
@@ -108,17 +118,93 @@ export function RichTextEditor({
   minHeightClassName?: string;
   enableImages?: boolean;
   resetKey?: string | number | boolean | null;
+  members?: EditorMentionMember[];
 }) {
   const sanitizeOptions: SanitizeRichTextOptions = {
     allowImages: enableImages,
   };
+  const mentionsEnabled = members.length > 0;
   const [html, setHtml] = useState(() =>
     normalizeRichTextInput(toEditorContent(defaultValue), sanitizeOptions),
   );
   const [, setToolbarTick] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [mentionedIds, setMentionedIds] = useState<string[]>([]);
+  const [activeMention, setActiveMention] = useState<ActiveMentionQuery | null>(
+    null,
+  );
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [mentionPlacement, setMentionPlacement] = useState<"below" | "above">(
+    "below",
+  );
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
+  const activeMentionRef = useRef<ActiveMentionQuery | null>(null);
+  const suggestionsRef = useRef<EditorMentionMember[]>([]);
+  const activeIndexRef = useRef(0);
+
+  const suggestions = useMemo(() => {
+    if (!activeMention) {
+      return [];
+    }
+    return filterMentionMembers(members, activeMention.query);
+  }, [activeMention, members]);
+
+  useEffect(() => {
+    activeMentionRef.current = activeMention;
+  }, [activeMention]);
+
+  useEffect(() => {
+    suggestionsRef.current = suggestions;
+  }, [suggestions]);
+
+  useEffect(() => {
+    activeIndexRef.current = activeIndex;
+  }, [activeIndex]);
+
+  function updateMentionPlacement() {
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+    const rect = root.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const menuHeight = 288; // max-h-72
+    setMentionPlacement(
+      spaceBelow < menuHeight && spaceAbove > spaceBelow ? "above" : "below",
+    );
+  }
+
+  function syncMentionState(current: Editor) {
+    if (!mentionsEnabled) {
+      setActiveMention(null);
+      return;
+    }
+    const next = getActiveMentionQuery(current);
+    setActiveMention(next);
+    setActiveIndex(0);
+    if (next) {
+      updateMentionPlacement();
+    }
+  }
+
+  function pickMention(member: EditorMentionMember) {
+    const current = editorRef.current;
+    const mention = activeMentionRef.current;
+    if (!current || !mention) {
+      return;
+    }
+    insertEditorMention(current, member, mention);
+    setMentionedIds((ids) =>
+      ids.includes(member.id) ? ids : [...ids, member.id],
+    );
+    setActiveMention(null);
+  }
+
+  const pickMentionRef = useRef(pickMention);
+  pickMentionRef.current = pickMention;
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -151,9 +237,11 @@ export function RichTextEditor({
     onUpdate: ({ editor: current }) => {
       setHtml(normalizeRichTextInput(current.getHTML(), sanitizeOptions));
       setToolbarTick((tick) => tick + 1);
+      syncMentionState(current);
     },
-    onSelectionUpdate: () => {
+    onSelectionUpdate: ({ editor: current }) => {
       setToolbarTick((tick) => tick + 1);
+      syncMentionState(current);
     },
     onCreate: ({ editor: current }) => {
       editorRef.current = current;
@@ -169,6 +257,47 @@ export function RichTextEditor({
           "prose-editor max-w-none px-3 py-2 text-sm outline-none focus-visible:outline-none",
           minHeightClassName,
         ),
+      },
+      handleKeyDown: (_view, event) => {
+        const mention = activeMentionRef.current;
+        const currentSuggestions = suggestionsRef.current;
+        if (!mention || currentSuggestions.length === 0) {
+          return false;
+        }
+
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setActiveIndex((index) => (index + 1) % currentSuggestions.length);
+          return true;
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setActiveIndex(
+            (index) =>
+              (index - 1 + currentSuggestions.length) %
+              currentSuggestions.length,
+          );
+          return true;
+        }
+
+        if (event.key === "Enter" || event.key === "Tab") {
+          event.preventDefault();
+          const member =
+            currentSuggestions[activeIndexRef.current] ??
+            currentSuggestions[0];
+          if (member) {
+            pickMentionRef.current(member);
+          }
+          return true;
+        }
+
+        if (event.key === "Escape") {
+          setActiveMention(null);
+          return true;
+        }
+
+        return false;
       },
       handlePaste: (_view, event) => {
         if (!enableImages) {
@@ -257,6 +386,8 @@ export function RichTextEditor({
     }
     editor.commands.clearContent(true);
     setHtml("");
+    setMentionedIds([]);
+    setActiveMention(null);
   }, [resetKey, editor]);
 
   async function insertImageFromFile(file: File | undefined) {
@@ -280,162 +411,212 @@ export function RichTextEditor({
   }
 
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-lg border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30",
-        className,
-      )}
-    >
-      <input type="hidden" name={name} value={html} readOnly />
+    <div ref={rootRef} className={cn("relative", className)}>
+      {mentionedIds.map((memberId) => (
+        <input
+          key={memberId}
+          type="hidden"
+          name="mentionedIds"
+          value={memberId}
+        />
+      ))}
 
-      <div className="flex flex-wrap gap-0.5 border-b border-border bg-muted/40 p-1">
-        <ToolbarButton
-          label="Pogrubienie"
-          active={editor?.isActive("bold")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleBold().run()}
-        >
-          <Bold />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Kursywa"
-          active={editor?.isActive("italic")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleItalic().run()}
-        >
-          <Italic />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Podkreślenie"
-          active={editor?.isActive("underline")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleUnderline().run()}
-        >
-          <UnderlineIcon />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Przekreślenie"
-          active={editor?.isActive("strike")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleStrike().run()}
-        >
-          <Strikethrough />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Nagłówek 2"
-          active={editor?.isActive("heading", { level: 2 })}
-          disabled={!editor}
-          onClick={() =>
-            editor?.chain().focus().toggleHeading({ level: 2 }).run()
-          }
-        >
-          <Heading2 />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Nagłówek 3"
-          active={editor?.isActive("heading", { level: 3 })}
-          disabled={!editor}
-          onClick={() =>
-            editor?.chain().focus().toggleHeading({ level: 3 }).run()
-          }
-        >
-          <Heading3 />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Lista punktowana"
-          active={editor?.isActive("bulletList")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleBulletList().run()}
-        >
-          <List />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Lista numerowana"
-          active={editor?.isActive("orderedList")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-        >
-          <ListOrdered />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Cytat"
-          active={editor?.isActive("blockquote")}
-          disabled={!editor}
-          onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-        >
-          <Quote />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Link"
-          active={editor?.isActive("link")}
-          disabled={!editor}
-          onClick={() => {
-            if (!editor) {
-              return;
+      <div className="overflow-hidden rounded-lg border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
+        <input type="hidden" name={name} value={html} readOnly />
+
+        <div className="flex flex-wrap gap-0.5 border-b border-border bg-muted/40 p-1">
+          <ToolbarButton
+            label="Pogrubienie"
+            active={editor?.isActive("bold")}
+            disabled={!editor}
+            onClick={() => editor?.chain().focus().toggleBold().run()}
+          >
+            <Bold />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Kursywa"
+            active={editor?.isActive("italic")}
+            disabled={!editor}
+            onClick={() => editor?.chain().focus().toggleItalic().run()}
+          >
+            <Italic />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Podkreślenie"
+            active={editor?.isActive("underline")}
+            disabled={!editor}
+            onClick={() => editor?.chain().focus().toggleUnderline().run()}
+          >
+            <UnderlineIcon />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Przekreślenie"
+            active={editor?.isActive("strike")}
+            disabled={!editor}
+            onClick={() => editor?.chain().focus().toggleStrike().run()}
+          >
+            <Strikethrough />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Nagłówek 2"
+            active={editor?.isActive("heading", { level: 2 })}
+            disabled={!editor}
+            onClick={() =>
+              editor?.chain().focus().toggleHeading({ level: 2 }).run()
             }
-            if (editor.isActive("link")) {
-              editor.chain().focus().unsetLink().run();
-              return;
+          >
+            <Heading2 />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Nagłówek 3"
+            active={editor?.isActive("heading", { level: 3 })}
+            disabled={!editor}
+            onClick={() =>
+              editor?.chain().focus().toggleHeading({ level: 3 }).run()
             }
-            const previous = editor.getAttributes("link").href as
-              | string
-              | undefined;
-            const url = window.prompt("Adres URL", previous ?? "https://");
-            if (!url) {
-              return;
-            }
-            editor
-              .chain()
-              .focus()
-              .extendMarkRange("link")
-              .setLink({ href: url })
-              .run();
-          }}
-        >
-          <Link2 />
-        </ToolbarButton>
-        {enableImages ? (
-          <>
-            <ToolbarButton
-              label="Dodaj zdjęcie"
-              disabled={!editor || uploading}
-              onClick={() => imageInputRef.current?.click()}
-            >
-              <ImageIcon />
-            </ToolbarButton>
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp"
-              className="hidden"
-              onChange={(event) => {
-                void insertImageFromFile(event.target.files?.[0]);
-              }}
-            />
-          </>
+          >
+            <Heading3 />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Lista punktowana"
+            active={editor?.isActive("bulletList")}
+            disabled={!editor}
+            onClick={() => editor?.chain().focus().toggleBulletList().run()}
+          >
+            <List />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Lista numerowana"
+            active={editor?.isActive("orderedList")}
+            disabled={!editor}
+            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+          >
+            <ListOrdered />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Cytat"
+            active={editor?.isActive("blockquote")}
+            disabled={!editor}
+            onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+          >
+            <Quote />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Link"
+            active={editor?.isActive("link")}
+            disabled={!editor}
+            onClick={() => {
+              if (!editor) {
+                return;
+              }
+              if (editor.isActive("link")) {
+                editor.chain().focus().unsetLink().run();
+                return;
+              }
+              const previous = editor.getAttributes("link").href as
+                | string
+                | undefined;
+              const url = window.prompt("Adres URL", previous ?? "https://");
+              if (!url) {
+                return;
+              }
+              editor
+                .chain()
+                .focus()
+                .extendMarkRange("link")
+                .setLink({ href: url })
+                .run();
+            }}
+          >
+            <Link2 />
+          </ToolbarButton>
+          {enableImages ? (
+            <>
+              <ToolbarButton
+                label="Dodaj zdjęcie"
+                disabled={!editor || uploading}
+                onClick={() => imageInputRef.current?.click()}
+              >
+                <ImageIcon />
+              </ToolbarButton>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                className="hidden"
+                onChange={(event) => {
+                  void insertImageFromFile(event.target.files?.[0]);
+                }}
+              />
+            </>
+          ) : null}
+          <div className="mx-1 w-px self-stretch bg-border" />
+          <ToolbarButton
+            label="Cofnij"
+            disabled={!editor?.can().undo()}
+            onClick={() => editor?.chain().focus().undo().run()}
+          >
+            <Undo2 />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Ponów"
+            disabled={!editor?.can().redo()}
+            onClick={() => editor?.chain().focus().redo().run()}
+          >
+            <Redo2 />
+          </ToolbarButton>
+        </div>
+
+        <EditorContent editor={editor} />
+        {enableImages && uploading ? (
+          <p className="border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
+            Wgrywanie zdjęcia…
+          </p>
         ) : null}
-        <div className="mx-1 w-px self-stretch bg-border" />
-        <ToolbarButton
-          label="Cofnij"
-          disabled={!editor?.can().undo()}
-          onClick={() => editor?.chain().focus().undo().run()}
-        >
-          <Undo2 />
-        </ToolbarButton>
-        <ToolbarButton
-          label="Ponów"
-          disabled={!editor?.can().redo()}
-          onClick={() => editor?.chain().focus().redo().run()}
-        >
-          <Redo2 />
-        </ToolbarButton>
       </div>
 
-      <EditorContent editor={editor} />
-      {enableImages && uploading ? (
-        <p className="border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
-          Wgrywanie zdjęcia…
-        </p>
+      {activeMention ? (
+        <ul
+          className={cn(
+            "absolute left-0 z-50 max-h-72 w-full overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md sm:max-w-sm",
+            mentionPlacement === "above"
+              ? "bottom-full mb-1"
+              : "top-full mt-1",
+          )}
+        >
+          {suggestions.length === 0 ? (
+            <li className="px-2 py-1.5 text-sm text-muted-foreground">
+              Brak użytkowników do wzmianki
+            </li>
+          ) : (
+            suggestions.map((member, index) => (
+              <li key={member.id}>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                    index === activeIndex ? "bg-muted" : "hover:bg-muted/70",
+                  )}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    pickMention(member);
+                  }}
+                >
+                  <Avatar size="sm" className="size-6">
+                    <AvatarImage
+                      src={member.avatarUrl ?? undefined}
+                      alt={member.name}
+                    />
+                    <AvatarFallback className="text-[9px]">
+                      {getInitials(member.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span>{member.name}</span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
       ) : null}
     </div>
   );

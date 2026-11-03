@@ -19,6 +19,7 @@ export function TicketInternalNote({
   bodyText,
   bodyHtml,
   canEdit,
+  members,
 }: {
   messageId: string;
   bodyText: string;
@@ -93,6 +94,7 @@ export function TicketInternalNote({
       <RichTextEditor
         name="body"
         enableImages
+        members={members}
         defaultValue={displayValue}
         placeholder="Notatka dla zespołu… wklej zdjęcie lub napisz @Imię"
         minHeightClassName="min-h-32"
