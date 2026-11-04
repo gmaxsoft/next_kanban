@@ -45,7 +45,13 @@ export type TicketActionState = {
   success?: string;
 } | null;
 
-const statusSchema = z.enum(["OPEN", "IN_PROGRESS", "RESOLVED"]);
+const statusSchema = z.enum([
+  "OPEN",
+  "IN_PROGRESS",
+  "RESOLVED",
+  "CLOSED",
+  "ON_HOLD",
+]);
 const prioritySchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
 
 async function denyUnlessTicketAccess(
@@ -452,6 +458,8 @@ export async function addTicketInternalNote(
       id: true,
       number: true,
       subject: true,
+      status: true,
+      statusLocked: true,
       teamId: true,
       assigneeId: true,
       watchers: { select: { userId: true } },
@@ -504,9 +512,19 @@ export async function addTicketInternalNote(
     },
   });
 
+  const reopenToInProgress =
+    ticket.status === "RESOLVED" ||
+    ticket.status === "CLOSED" ||
+    ticket.status === "ON_HOLD";
+
   await prisma.ticket.update({
     where: { id: ticketId },
-    data: { lastMessageAt: new Date() },
+    data: {
+      lastMessageAt: new Date(),
+      ...(reopenToInProgress
+        ? { status: "IN_PROGRESS" as const, statusLocked: false }
+        : {}),
+    },
   });
 
   const displayId = formatTicketId(ticket.number);
@@ -579,6 +597,7 @@ export async function addTicketInternalNote(
     });
   }
 
+  revalidatePath("/tickets");
   revalidatePath(`/tickets/${ticketId}`);
   return { success: "Dodano notatkę wewnętrzną." };
 }
@@ -863,14 +882,8 @@ export async function replyToTicket(
     where: { id: ticketId },
     data: {
       lastMessageAt: new Date(),
-      ...(ticket.statusLocked
-        ? {}
-        : {
-            status:
-              ticket.status === "RESOLVED" || ticket.status === "OPEN"
-                ? "IN_PROGRESS"
-                : ticket.status,
-          }),
+      status: "IN_PROGRESS",
+      statusLocked: false,
     },
   });
 

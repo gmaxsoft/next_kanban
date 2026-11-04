@@ -429,13 +429,12 @@ export async function processIncomingEmail(
           where: { id: ticket.id },
           data: {
             lastMessageAt: new Date(),
-            // Manual status stays put; otherwise reopen resolved tickets.
-            ...(ticket.statusLocked
-              ? {}
-              : {
-                  status:
-                    ticket.status === "RESOLVED" ? "OPEN" : ticket.status,
-                }),
+            // Reopen archived / parked tickets back to active work.
+            ...(ticket.status === "RESOLVED" ||
+            ticket.status === "CLOSED" ||
+            ticket.status === "ON_HOLD"
+              ? { status: "IN_PROGRESS" as const, statusLocked: false }
+              : {}),
           },
         }),
       ]);

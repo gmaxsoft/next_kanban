@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 
-import {
-  TicketsDataTable,
-  type TicketsTableRow,
-} from "@/components/tickets/tickets-data-table";
-import { Card } from "@/components/ui/card";
+import type { TicketsTableRow } from "@/components/tickets/tickets-data-table";
+import { TicketsListTabs } from "@/components/tickets/tickets-list-tabs";
 import { requireAuth } from "@/lib/auth-utils";
 import { ticketStatusLabel } from "@/lib/ticket-status";
 import { listTickets } from "@/lib/tickets";
@@ -12,6 +9,8 @@ import { listTickets } from "@/lib/tickets";
 export const metadata: Metadata = {
   title: "Tickety",
 };
+
+const ARCHIVE_STATUSES = new Set(["RESOLVED", "CLOSED"]);
 
 export default async function TicketsPage() {
   const session = await requireAuth();
@@ -70,6 +69,13 @@ export default async function TicketsPage() {
     };
   });
 
+  const currentRows = rows.filter(
+    (ticket) => !ARCHIVE_STATUSES.has(ticket.status),
+  );
+  const archiveRows = rows.filter((ticket) =>
+    ARCHIVE_STATUSES.has(ticket.status),
+  );
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
       <div>
@@ -81,23 +87,11 @@ export default async function TicketsPage() {
         </p>
       </div>
 
-      <Card>
-        <TicketsDataTable
-          data={rows}
-          isAdmin={isAdmin}
-          description={
-            rows.length === 0
-              ? "Brak zgłoszeń."
-              : `${rows.length} ${
-                  rows.length === 1
-                    ? "ticket"
-                    : rows.length < 5
-                      ? "tickety"
-                      : "ticketów"
-                } · sortowanie i filtry kolumn (TanStack Table)`
-          }
-        />
-      </Card>
+      <TicketsListTabs
+        currentRows={currentRows}
+        archiveRows={archiveRows}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 }

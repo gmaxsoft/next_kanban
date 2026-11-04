@@ -220,7 +220,7 @@ Authorization: Bearer silny-losowy-sekret
 - Mail z tematem zawierającym `[T-123]` (np. `Re: [T-123] Problem…`) → wiadomość dopisywana do istniejącego ticketu.
 - Duplikaty po `messageId` / `email_id` są ignorowane (idempotencja).
 
-Statusy: `Otwarte` · `W trakcie` · `Rozwiązane`. Odpowiedź e-mail lub nowe inbound po Rozwiązane zwykle wraca ticket do pracy (Otwarte / W trakcie).
+Statusy: `Otwarte` · `W trakcie` · `Rozwiązane` · `Zamknięte` · `Na później`. Lista ma zakładki **Bieżące** (bez Rozwiązane/Zamknięte) i **Archiwalne**. Nowe inbound, **notatka wewnętrzna** lub odpowiedź agenta po Rozwiązane / Zamknięte / Na później wraca ticket na Bieżące ze statusem **W trakcie** (także gdy status był ustawiony ręcznie).
 
 ---
 
@@ -236,7 +236,7 @@ Statusy: `Otwarte` · `W trakcie` · `Rozwiązane`. Odpowiedź e-mail lub nowe i
 | Akcja | Opis |
 | --- | --- |
 | Historia | E-maile inbound, odpowiedzi outbound, notatki wewnętrzne |
-| Zmień status | Otwarte / W trakcie / Rozwiązane |
+| Zmień status | Otwarte / W trakcie / Rozwiązane / Zamknięte / Na później |
 | Zapisz zespół | Ręczny wybór zespołu (nadpisuje auto-mapowanie) |
 | Utwórz zadanie na tablicy Kanban | Karta w kolumnie „Do zrobienia” / „To Do” / pierwszej kolumnie; tytuł `[T-101] …`; link ticket ↔ task |
 | Wyślij e-mail | Odpowiedź do nadawcy; temat `Re: [T-101] …`; wymaga `RESEND_API_KEY` |
