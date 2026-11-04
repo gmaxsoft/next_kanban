@@ -9,6 +9,10 @@ import {
 } from "@/app/actions/tickets";
 import { Label } from "@/components/ui/label";
 import { useActionToast } from "@/hooks/use-action-toast";
+import {
+  TICKET_STATUSES,
+  ticketStatusLabel,
+} from "@/lib/ticket-status";
 import { cn } from "@/lib/utils";
 
 const selectClassName =
@@ -54,9 +58,11 @@ export function TicketStatusForm({
           });
         }}
       >
-        <option value="OPEN">Otwarte</option>
-        <option value="IN_PROGRESS">W trakcie</option>
-        <option value="RESOLVED">Rozwiązane</option>
+        {TICKET_STATUSES.map((item) => (
+          <option key={item} value={item}>
+            {ticketStatusLabel(item)}
+          </option>
+        ))}
       </select>
     </div>
   );

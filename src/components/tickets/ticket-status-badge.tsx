@@ -3,21 +3,20 @@ import type { TicketStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { ticketStatusLabel } from "@/lib/ticket-status";
 
-const variants: Record<
+const variantByStatus: Record<
   TicketStatus,
-  "default" | "secondary" | "outline" | "destructive"
+  "default" | "secondary" | "destructive" | "outline"
 > = {
   OPEN: "destructive",
   IN_PROGRESS: "default",
   RESOLVED: "secondary",
+  CLOSED: "outline",
+  ON_HOLD: "outline",
 };
 
 export function TicketStatusBadge({ status }: { status: TicketStatus }) {
   return (
-    <Badge
-      variant={variants[status]}
-      className="border border-border/60 shadow-xs"
-    >
+    <Badge variant={variantByStatus[status]}>
       {ticketStatusLabel(status)}
     </Badge>
   );

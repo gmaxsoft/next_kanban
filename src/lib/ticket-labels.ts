@@ -1,17 +1,6 @@
-import type { Priority, TicketStatus } from "@prisma/client";
+import type { Priority } from "@prisma/client";
 
-export function ticketStatusLabel(status: TicketStatus): string {
-  switch (status) {
-    case "OPEN":
-      return "Otwarte";
-    case "IN_PROGRESS":
-      return "W realizacji";
-    case "RESOLVED":
-      return "Rozwiązane";
-    default:
-      return status;
-  }
-}
+export { ticketStatusLabel } from "@/lib/ticket-status";
 
 export function ticketPriorityLabel(priority: Priority): string {
   switch (priority) {

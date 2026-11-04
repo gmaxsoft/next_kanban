@@ -84,6 +84,8 @@ export default async function HomePage() {
     openTicketCount,
     inProgressTicketCount,
     resolvedTicketCount,
+    closedTicketCount,
+    onHoldTicketCount,
     myTicketCount,
     unassignedTicketCount,
     recentTickets,
@@ -110,6 +112,12 @@ export default async function HomePage() {
     }),
     prisma.ticket.count({
       where: { ...ticketScope, status: "RESOLVED" },
+    }),
+    prisma.ticket.count({
+      where: { ...ticketScope, status: "CLOSED" },
+    }),
+    prisma.ticket.count({
+      where: { ...ticketScope, status: "ON_HOLD" },
     }),
     prisma.ticket.count({
       where: { ...ticketScope, assigneeId: userId },
@@ -381,6 +389,8 @@ export default async function HomePage() {
             <Badge variant="secondary">
               Rozwiązane: {resolvedTicketCount}
             </Badge>
+            <Badge variant="outline">Zamknięte: {closedTicketCount}</Badge>
+            <Badge variant="outline">Na później: {onHoldTicketCount}</Badge>
             <Badge variant="outline">Moje: {myTicketCount}</Badge>
           </div>
 

@@ -17,6 +17,8 @@ enum TicketStatus {
   OPEN
   IN_PROGRESS
   RESOLVED
+  CLOSED
+  ON_HOLD
 }
 
 enum TicketMessageKind {
