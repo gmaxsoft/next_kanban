@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import type { ColumnFiltersState, SortingState } from "@tanstack/react-table";
+import { useMemo, type ReactNode } from "react";
 import {
   getCoreRowModel,
   getFacetedRowModel,
@@ -18,6 +17,7 @@ import { Search } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
+import { useDataTableState } from "@/components/data-table/use-data-table-state";
 import { Input } from "@/components/ui/input";
 
 export type TeamsTableRow = {
@@ -49,11 +49,18 @@ export function TeamsDataTable({
   canManage: boolean;
   renderActions?: (team: TeamsTableRow) => ReactNode;
 }) {
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "name", desc: false },
-  ]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const {
+    sorting,
+    setSorting,
+    columnFilters,
+    setColumnFilters,
+    globalFilter,
+    setGlobalFilter,
+    pagination,
+    setPagination,
+  } = useDataTableState("settings-teams", {
+    sorting: [{ id: "name", desc: false }],
+  });
 
   const columns = useMemo(
     () =>
@@ -136,10 +143,12 @@ export function TeamsDataTable({
       sorting,
       columnFilters,
       globalFilter,
+      pagination,
     },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
     globalFilterFn: (row, _columnId, filterValue) => {
       const q = String(filterValue ?? "")
         .trim()
@@ -155,9 +164,6 @@ export function TeamsDataTable({
     getPaginationRowModel: getPaginationRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-    initialState: {
-      pagination: { pageIndex: 0, pageSize: 20 },
-    },
   });
 
   return (

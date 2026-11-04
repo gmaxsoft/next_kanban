@@ -10,7 +10,7 @@ For new list/module UIs in this app, **use the existing TanStack Table pattern**
 ## Pattern (reference: `/users`)
 
 1. **RSC page** loads the full (scoped) dataset and maps rows to a serializable row type.
-2. **Client `*DataTable`** owns table state: sorting, column filters, `globalFilter`, pagination.
+2. **Client `*DataTable`** owns table state: sorting, column filters, `globalFilter`, pagination — via `useDataTableState("unique-table-id")` so filters survive refresh (`localStorage`).
 3. Wrap with `<Card>` on the page; put **`CardHeader` + global search (`CardAction`) + `CardContent`** inside the data-table component (same as `UsersDataTable`).
 4. Reuse shared pieces:
    - `src/components/data-table/data-table.tsx`

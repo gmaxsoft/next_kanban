@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import type { ColumnFiltersState, SortingState } from "@tanstack/react-table";
 import {
   getCoreRowModel,
   getFacetedRowModel,
@@ -24,6 +23,7 @@ import { PriorityBadge } from "@/components/kanban/priority-badge";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
+import { useDataTableState } from "@/components/data-table/use-data-table-state";
 import {
   reorderRowsById,
   RowDragHandleCell,
@@ -84,9 +84,16 @@ export function TasksDataTable({
   description: string;
 }) {
   const [rows, setRows] = useState(data);
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const {
+    sorting,
+    setSorting,
+    columnFilters,
+    setColumnFilters,
+    globalFilter,
+    setGlobalFilter,
+    pagination,
+    setPagination,
+  } = useDataTableState("tasks");
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -269,10 +276,12 @@ export function TasksDataTable({
       sorting,
       columnFilters,
       globalFilter,
+      pagination,
     },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
     globalFilterFn: (row, _columnId, filterValue) => {
       const q = String(filterValue ?? "")
         .trim()
@@ -288,9 +297,6 @@ export function TasksDataTable({
     getPaginationRowModel: getPaginationRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-    initialState: {
-      pagination: { pageIndex: 0, pageSize: 20 },
-    },
   });
 
   function handleRowDragEnd(event: DragEndEvent) {

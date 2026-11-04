@@ -3,11 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type {
-  ColumnFiltersState,
-  RowSelectionState,
-  SortingState,
-} from "@tanstack/react-table";
+import type { RowSelectionState } from "@tanstack/react-table";
 import {
   getCoreRowModel,
   getFacetedRowModel,
@@ -28,6 +24,7 @@ import { mergeTickets, reorderTickets } from "@/app/actions/tickets";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
+import { useDataTableState } from "@/components/data-table/use-data-table-state";
 import {
   reorderRowsById,
   RowDragHandleCell,
@@ -77,16 +74,27 @@ export function TicketsDataTable({
   data,
   isAdmin,
   description,
+  tableId = "tickets",
+  title = "Lista ticketów",
 }: {
   data: TicketsTableRow[];
   isAdmin: boolean;
   description: string;
+  tableId?: string;
+  title?: string;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState(data);
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const {
+    sorting,
+    setSorting,
+    columnFilters,
+    setColumnFilters,
+    globalFilter,
+    setGlobalFilter,
+    pagination,
+    setPagination,
+  } = useDataTableState(tableId);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [mergeOpen, setMergeOpen] = useState(false);
   const [primaryTicketId, setPrimaryTicketId] = useState("");
@@ -293,11 +301,13 @@ export function TicketsDataTable({
       sorting,
       columnFilters,
       globalFilter,
+      pagination,
       rowSelection,
     },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
     onRowSelectionChange: setRowSelection,
     globalFilterFn: (row, _columnId, filterValue) => {
       const q = String(filterValue ?? "")
@@ -314,9 +324,6 @@ export function TicketsDataTable({
     getPaginationRowModel: getPaginationRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-    initialState: {
-      pagination: { pageIndex: 0, pageSize: 20 },
-    },
   });
 
   const selectedRows = table.getSelectedRowModel().rows.map((row) => row.original);
@@ -382,7 +389,7 @@ export function TicketsDataTable({
   return (
     <>
       <CardHeader>
-        <CardTitle>Lista ticketów</CardTitle>
+        <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
         <CardAction>
           <div className="flex flex-wrap items-center justify-end gap-2">

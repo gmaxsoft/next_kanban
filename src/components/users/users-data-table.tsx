@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { ColumnFiltersState, SortingState } from "@tanstack/react-table";
+import { useMemo } from "react";
 import {
   getCoreRowModel,
   getFacetedRowModel,
@@ -20,6 +19,7 @@ import { EditUserButton } from "@/components/auth/edit-user-button";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
+import { useDataTableState } from "@/components/data-table/use-data-table-state";
 import { Badge } from "@/components/ui/badge";
 import {
   CardAction,
@@ -64,12 +64,21 @@ export function UsersDataTable({
   currentUserId: string;
   description: string;
 }) {
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "isActive", desc: true },
-    { id: "name", desc: false },
-  ]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const {
+    sorting,
+    setSorting,
+    columnFilters,
+    setColumnFilters,
+    globalFilter,
+    setGlobalFilter,
+    pagination,
+    setPagination,
+  } = useDataTableState("users", {
+    sorting: [
+      { id: "isActive", desc: true },
+      { id: "name", desc: false },
+    ],
+  });
 
   const columns = useMemo(
     () =>
@@ -209,10 +218,12 @@ export function UsersDataTable({
       sorting,
       columnFilters,
       globalFilter,
+      pagination,
     },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
     globalFilterFn: "includesString",
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -220,9 +231,6 @@ export function UsersDataTable({
     getPaginationRowModel: getPaginationRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-    initialState: {
-      pagination: { pageIndex: 0, pageSize: 20 },
-    },
   });
 
   return (
