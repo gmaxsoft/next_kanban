@@ -86,7 +86,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
       ? "Widok listy — kliknij wiersz, aby otworzyć szczegóły. Prawy przycisk: archiwum / usuń."
       : view === "archive"
         ? "Archiwum — zadania ukryte z tablicy. Prawy przycisk: przywróć / usuń."
-        : "Widok tablicy — kliknij kartę, aby otworzyć szczegóły. Prawy przycisk: archiwum / usuń.";
+        : "Widok tablicy — kliknij kartę, aby otworzyć szczegóły. Przesuwanie: osoby przypisane lub administrator. Prawy przycisk: archiwum / usuń.";
 
   return (
     <div className="flex flex-1 flex-col gap-5 p-6">
@@ -156,6 +156,8 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
           q={q}
           assignee={assignee}
           view={view}
+          currentUserId={session.user.id}
+          isAdmin={session.user.isAdmin}
           canCreateTasks={canCreateTasks}
           canDeleteTasks={canDeleteTasks}
         />

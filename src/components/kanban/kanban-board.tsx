@@ -17,6 +17,7 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { moveTask } from "@/app/actions/boards";
 import { AddTaskForm } from "@/components/kanban/add-task-form";
@@ -26,6 +27,7 @@ import { TaskContextMenu } from "@/components/kanban/task-context-menu";
 import type { BoardView } from "@/lib/board-query";
 import { taskPath } from "@/lib/board-query";
 import type { BoardColumn, BoardTask } from "@/lib/kanban";
+import { canUserMoveTask } from "@/lib/task-access";
 
 function findColumnId(columns: BoardColumn[], id: UniqueIdentifier) {
   const value = String(id);
@@ -135,19 +137,29 @@ function placementOf(columns: BoardColumn[], taskId: string) {
   };
 }
 
-function persistMove(boardId: string, columns: BoardColumn[], taskId: string) {
+async function persistMove(
+  boardId: string,
+  columns: BoardColumn[],
+  taskId: string,
+  onDenied: () => void,
+) {
   const placement = placementOf(columns, taskId);
 
   if (!placement) {
     return;
   }
 
-  void moveTask({
+  const result = await moveTask({
     boardId,
     taskId,
     toColumnId: placement.columnId,
     toIndex: placement.index,
   });
+
+  if (result.error) {
+    toast.error(result.error);
+    onDenied();
+  }
 }
 
 export function KanbanBoard({
@@ -156,6 +168,8 @@ export function KanbanBoard({
   q,
   assignee,
   view,
+  currentUserId,
+  isAdmin,
   canCreateTasks,
   canDeleteTasks = false,
 }: {
@@ -164,6 +178,8 @@ export function KanbanBoard({
   q: string;
   assignee: string;
   view: BoardView;
+  currentUserId: string;
+  isAdmin: boolean;
   canCreateTasks: boolean;
   canDeleteTasks?: boolean;
 }) {
@@ -193,9 +209,26 @@ export function KanbanBoard({
     [columns],
   );
 
+  function canDragTask(taskId: string) {
+    const task = tasksById.get(taskId);
+    if (!task) {
+      return false;
+    }
+
+    return canUserMoveTask(
+      { id: currentUserId, isAdmin },
+      task.assignees.map((row) => row.id),
+    );
+  }
+
   function handleDragStart(event: DragStartEvent) {
+    const taskId = String(event.active.id);
+    if (!canDragTask(taskId)) {
+      return;
+    }
+
     dragOriginRef.current = columnsRef.current;
-    setActiveTask(tasksById.get(String(event.active.id)) ?? null);
+    setActiveTask(tasksById.get(taskId) ?? null);
   }
 
   function handleDragCancel() {
@@ -215,6 +248,10 @@ export function KanbanBoard({
     }
 
     const activeId = String(active.id);
+    if (!canDragTask(activeId)) {
+      return;
+    }
+
     const overId = String(over.id);
 
     setColumns((current) => {
@@ -235,12 +272,17 @@ export function KanbanBoard({
     const { active, over } = event;
     setActiveTask(null);
 
+    const activeId = String(active.id);
+    if (!canDragTask(activeId)) {
+      handleDragCancel();
+      return;
+    }
+
     if (!over) {
       handleDragCancel();
       return;
     }
 
-    const activeId = String(active.id);
     const overId = String(over.id);
     const current = columnsRef.current;
     const origin = dragOriginRef.current ?? current;
@@ -274,7 +316,11 @@ export function KanbanBoard({
       return;
     }
 
-    persistMove(boardId, next, activeId);
+    void persistMove(boardId, next, activeId, () => {
+      columnsRef.current = origin;
+      setColumns(origin);
+      router.refresh();
+    });
   }
 
   function openTask(taskId: string) {
@@ -355,6 +401,7 @@ export function KanbanBoard({
               boardId={boardId}
               canCreateTasks={canCreateTasks}
               canDeleteTasks={canDeleteTasks}
+              canDragTask={canDragTask}
               onOpenTask={openTask}
             />
           ))}

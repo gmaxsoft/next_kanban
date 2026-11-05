@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { denyIfRestricted } from "@/lib/auth-utils";
-import { notifyTaskParticipants } from "@/lib/task-notifications";
 import { prisma } from "@/lib/prisma";
 import { normalizeRichTextInput } from "@/lib/rich-text";
+import { canUserMoveTask } from "@/lib/task-access";
+import { notifyTaskParticipants } from "@/lib/task-notifications";
 import {
   createBoardSchema,
   createTaskSchema,
@@ -205,6 +206,7 @@ export async function moveTask(input: {
     prisma.task.findUnique({
       where: { id: taskId },
       include: {
+        assignments: { select: { userId: true } },
         column: {
           select: {
             boardId: true,
@@ -227,6 +229,18 @@ export async function moveTask(input: {
     (!session.user.isAdmin && task.column.board.teamId !== session.user.teamId)
   ) {
     return { error: "Nie znaleziono zadania lub kolumny." };
+  }
+
+  if (
+    !canUserMoveTask(
+      { id: session.user.id, isAdmin: session.user.isAdmin },
+      task.assignments.map((row) => row.userId),
+    )
+  ) {
+    return {
+      error:
+        "Tylko osoba przypisana do zadania lub administrator może je przenosić.",
+    };
   }
 
   const fromColumnId = task.columnId;

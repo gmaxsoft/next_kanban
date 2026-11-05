@@ -13,12 +13,14 @@ export function KanbanColumn({
   boardId,
   canCreateTasks,
   canDeleteTasks,
+  canDragTask,
   onOpenTask,
 }: {
   column: BoardColumn;
   boardId: string;
   canCreateTasks: boolean;
   canDeleteTasks: boolean;
+  canDragTask: (taskId: string) => boolean;
   onOpenTask: (taskId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
@@ -51,6 +53,7 @@ export function KanbanColumn({
               boardId={boardId}
               task={task}
               canDelete={canDeleteTasks}
+              canDrag={canDragTask(task.id)}
               onOpen={onOpenTask}
             />
           ))}

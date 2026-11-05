@@ -13,11 +13,13 @@ export function SortableTaskCard({
   boardId,
   task,
   canDelete,
+  canDrag,
   onOpen,
 }: {
   boardId: string;
   task: BoardTask;
   canDelete: boolean;
+  canDrag: boolean;
   onOpen: (taskId: string) => void;
 }) {
   const {
@@ -27,7 +29,7 @@ export function SortableTaskCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id });
+  } = useSortable({ id: task.id, disabled: !canDrag });
   const suppressClickRef = useRef(false);
 
   useEffect(() => {
@@ -51,14 +53,20 @@ export function SortableTaskCard({
             transition,
           }}
           className={cn(
-            "cursor-grab touch-none",
+            "touch-none",
+            canDrag ? "cursor-grab" : "cursor-pointer",
             isDragging && "z-10 cursor-grabbing opacity-60",
           )}
           {...attributes}
-          {...listeners}
+          {...(canDrag ? listeners : {})}
           role="button"
           tabIndex={0}
           aria-label={`Otwórz zadanie ${task.title}`}
+          title={
+            canDrag
+              ? undefined
+              : "Przenosić mogą tylko osoby przypisane do zadania lub administrator."
+          }
           onContextMenu={onContextMenu}
           onClick={() => {
             if (suppressClickRef.current) {
