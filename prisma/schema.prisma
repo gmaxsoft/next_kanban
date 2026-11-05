@@ -103,6 +103,10 @@ model User {
   directConversationReads DirectConversationRead[]
   dmConversationsLow   DirectConversation[] @relation("DmUserLow")
   dmConversationsHigh  DirectConversation[] @relation("DmUserHigh")
+  groupMessages        GroupMessage[]
+  groupMemberships     GroupConversationMember[]
+  groupConversationsCreated GroupConversation[] @relation("GroupCreator")
+  groupConversationReads GroupConversationRead[]
   notifications        Notification[]
   ticketMessages       TicketMessage[]
   ticketMessageMentions TicketMessageMention[]
@@ -408,6 +412,85 @@ model DirectAttachment {
   createdAt    DateTime @default(now())
 
   message DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+model GroupConversation {
+  id          String   @id @default(uuid()) @db.Char(36)
+  name        String?  @db.VarChar(120)
+  /// SHA-256 hex of sorted member UUIDs (comma-joined) — dedupes identical sets.
+  memberKey   String   @unique @db.Char(64)
+  createdById String   @db.Char(36)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User                      @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  members   GroupConversationMember[]
+  messages  GroupMessage[]
+  reads     GroupConversationRead[]
+
+  @@index([createdById])
+  @@index([updatedAt])
+}
+
+model GroupConversationMember {
+  id             String   @id @default(uuid()) @db.Char(36)
+  conversationId String   @db.Char(36)
+  userId         String   @db.Char(36)
+  joinedAt       DateTime @default(now())
+
+  conversation GroupConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model GroupMessage {
+  id             String   @id @default(uuid()) @db.Char(36)
+  content        String   @db.Text
+  authorId       String   @db.Char(36)
+  conversationId String   @db.Char(36)
+  createdAt      DateTime @default(now())
+
+  author       User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  conversation GroupConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments  GroupAttachment[]
+
+  @@index([createdAt])
+  @@index([authorId])
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
+}
+
+model GroupConversationRead {
+  id             String   @id @default(uuid()) @db.Char(36)
+  userId         String   @db.Char(36)
+  conversationId String   @db.Char(36)
+  lastReadAt     DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation GroupConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conversationId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model GroupAttachment {
+  id           String   @id @default(uuid()) @db.Char(36)
+  messageId    String   @db.Char(36)
+  fileName     String
+  originalName String
+  mimeType     String
+  size         Int
+  url          String
+  createdAt    DateTime @default(now())
+
+  message GroupMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
 }

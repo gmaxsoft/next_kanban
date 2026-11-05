@@ -15,9 +15,10 @@ async function main() {
       pairDirectUserIds,
       toChatMessageDto,
       toDirectMessageDto,
+      toGroupMessageDto,
     },
     { verifyChatToken },
-    { chatMessageSchema, directMessageSchema },
+    { chatMessageSchema, directMessageSchema, groupMessageSchema },
   ] = await Promise.all([
     import("../src/lib/prisma"),
     import("../src/lib/chat"),
@@ -303,6 +304,81 @@ async function main() {
           .emit(CHAT_EVENTS.dmMessage, dto);
       } catch (error) {
         console.error("[chat] zapis DM nie powiódł się", error);
+        socket.emit(CHAT_EVENTS.error, {
+          error: "Nie udało się zapisać wiadomości.",
+        });
+      }
+    });
+
+    socket.on(CHAT_EVENTS.groupSend, async (payload: unknown) => {
+      const parsed = groupMessageSchema.safeParse(payload);
+
+      if (!parsed.success) {
+        socket.emit(CHAT_EVENTS.error, {
+          error: parsed.error.issues[0]?.message ?? "Nieprawidłowa wiadomość.",
+        });
+        return;
+      }
+
+      const membership = await prisma.groupConversationMember.findFirst({
+        where: {
+          conversationId: parsed.data.conversationId,
+          userId: user.id,
+        },
+        select: { conversationId: true },
+      });
+
+      if (!membership) {
+        socket.emit(CHAT_EVENTS.error, {
+          error: "Nie jesteś członkiem tej grupy.",
+        });
+        return;
+      }
+
+      try {
+        const message = await prisma.groupMessage.create({
+          data: {
+            content: parsed.data.content,
+            authorId: user.id,
+            conversationId: membership.conversationId,
+            attachments:
+              parsed.data.attachments.length > 0
+                ? {
+                    create: parsed.data.attachments.map((attachment) => ({
+                      fileName: attachment.fileName,
+                      originalName: attachment.originalName,
+                      mimeType: attachment.mimeType,
+                      size: attachment.size,
+                      url: attachment.url,
+                    })),
+                  }
+                : undefined,
+          },
+          include: {
+            author: { select: { id: true, name: true, avatarUrl: true } },
+            attachments: { orderBy: { createdAt: "asc" } },
+          },
+        });
+
+        await prisma.groupConversation.update({
+          where: { id: membership.conversationId },
+          data: { updatedAt: new Date() },
+        });
+
+        const memberIds = await prisma.groupConversationMember.findMany({
+          where: { conversationId: membership.conversationId },
+          select: { userId: true },
+        });
+
+        const dto = toGroupMessageDto(message);
+        for (const member of memberIds) {
+          io.to(chatUserRoom(member.userId)).emit(
+            CHAT_EVENTS.groupMessage,
+            dto,
+          );
+        }
+      } catch (error) {
+        console.error("[chat] zapis grupy nie powiódł się", error);
         socket.emit(CHAT_EVENTS.error, {
           error: "Nie udało się zapisać wiadomości.",
         });

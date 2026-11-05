@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import {
   markChatTeamAsRead,
   markDirectConversationAsRead,
+  markGroupConversationAsRead,
 } from "@/app/actions/chat";
 import { useChatSocket } from "@/components/chat/chat-socket-provider";
 
@@ -12,25 +13,29 @@ import { useChatSocket } from "@/components/chat/chat-socket-provider";
 export function ChatReadMarker({
   teamId,
   conversationId,
+  groupConversationId,
   messageCount,
 }: {
   teamId?: string;
   conversationId?: string;
+  groupConversationId?: string;
   /** Bumps when new messages arrive while viewing this thread. */
   messageCount: number;
 }) {
   const { setUnreadCount } = useChatSocket();
 
   useEffect(() => {
-    if (!teamId && !conversationId) {
+    if (!teamId && !conversationId && !groupConversationId) {
       return;
     }
 
     let cancelled = false;
 
-    const action = conversationId
-      ? markDirectConversationAsRead(conversationId)
-      : markChatTeamAsRead(teamId!);
+    const action = groupConversationId
+      ? markGroupConversationAsRead(groupConversationId)
+      : conversationId
+        ? markDirectConversationAsRead(conversationId)
+        : markChatTeamAsRead(teamId!);
 
     void action.then((result) => {
       if (cancelled || result.error || result.unreadCount === undefined) {
@@ -43,7 +48,7 @@ export function ChatReadMarker({
     return () => {
       cancelled = true;
     };
-  }, [teamId, conversationId, messageCount, setUnreadCount]);
+  }, [teamId, conversationId, groupConversationId, messageCount, setUnreadCount]);
 
   return null;
 }

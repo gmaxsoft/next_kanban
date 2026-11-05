@@ -62,6 +62,37 @@ export async function ensureDirectConversationReads(userId: string) {
   });
 }
 
+export async function ensureGroupConversationReads(userId: string) {
+  const memberships = await prisma.groupConversationMember.findMany({
+    where: { userId },
+    select: { conversationId: true },
+  });
+
+  if (memberships.length === 0) {
+    return;
+  }
+
+  const existing = await prisma.groupConversationRead.findMany({
+    where: { userId },
+    select: { conversationId: true },
+  });
+  const known = new Set(existing.map((row) => row.conversationId));
+  const missing = memberships.filter((row) => !known.has(row.conversationId));
+
+  if (missing.length === 0) {
+    return;
+  }
+
+  const now = new Date();
+  await prisma.groupConversationRead.createMany({
+    data: missing.map((row) => ({
+      userId,
+      conversationId: row.conversationId,
+      lastReadAt: now,
+    })),
+  });
+}
+
 async function countUnreadTeamMessages(userId: string) {
   await ensureChatTeamReads(userId);
 
@@ -147,13 +178,69 @@ export async function countUnreadDirectByPeer(
   return result;
 }
 
+async function countUnreadGroupMessages(userId: string) {
+  const byGroup = await countUnreadGroupById(userId);
+  return Object.values(byGroup).reduce((sum, value) => sum + value, 0);
+}
+
+/** Unread group message counts keyed by conversation id. */
+export async function countUnreadGroupById(
+  userId: string,
+): Promise<Record<string, number>> {
+  await ensureGroupConversationReads(userId);
+
+  const memberships = await prisma.groupConversationMember.findMany({
+    where: { userId },
+    select: {
+      conversationId: true,
+      conversation: {
+        select: {
+          reads: {
+            where: { userId },
+            select: { lastReadAt: true },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  if (memberships.length === 0) {
+    return {};
+  }
+
+  const entries = await Promise.all(
+    memberships.map(async (row) => {
+      const lastReadAt =
+        row.conversation.reads[0]?.lastReadAt ?? new Date(0);
+      const count = await prisma.groupMessage.count({
+        where: {
+          conversationId: row.conversationId,
+          authorId: { not: userId },
+          createdAt: { gt: lastReadAt },
+        },
+      });
+      return [row.conversationId, count] as const;
+    }),
+  );
+
+  const result: Record<string, number> = {};
+  for (const [conversationId, count] of entries) {
+    if (count > 0) {
+      result[conversationId] = count;
+    }
+  }
+  return result;
+}
+
 export async function countUnreadChatMessages(userId: string) {
-  const [teamUnread, dmUnread] = await Promise.all([
+  const [teamUnread, dmUnread, groupUnread] = await Promise.all([
     countUnreadTeamMessages(userId),
     countUnreadDirectMessages(userId),
+    countUnreadGroupMessages(userId),
   ]);
 
-  return teamUnread + dmUnread;
+  return teamUnread + dmUnread + groupUnread;
 }
 
 export async function markChatTeamRead(userId: string, teamId: string) {
@@ -181,6 +268,27 @@ export async function markDirectConversationRead(
   const now = new Date();
 
   await prisma.directConversationRead.upsert({
+    where: {
+      userId_conversationId: { userId, conversationId },
+    },
+    create: {
+      userId,
+      conversationId,
+      lastReadAt: now,
+    },
+    update: {
+      lastReadAt: now,
+    },
+  });
+}
+
+export async function markGroupConversationRead(
+  userId: string,
+  conversationId: string,
+) {
+  const now = new Date();
+
+  await prisma.groupConversationRead.upsert({
     where: {
       userId_conversationId: { userId, conversationId },
     },

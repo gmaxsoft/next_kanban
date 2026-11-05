@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { io, type Socket } from "socket.io-client";
-import { ArrowLeft, Paperclip, Send, X } from "lucide-react";
+import { ArrowLeft, Paperclip, Send, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { deleteGroupConversationAction } from "@/app/actions/chat";
 import { ChatAttachments } from "@/components/chat/chat-attachments";
 import { ChatReadMarker } from "@/components/chat/chat-read-marker";
 import { EmojiPicker } from "@/components/chat/emoji-picker";
@@ -24,6 +25,9 @@ import {
   type DirectMessageDto,
   type DirectPeer,
   type DmUnreadByPeer,
+  type GroupConversationSummary,
+  type GroupMessageDto,
+  type GroupUnreadById,
 } from "@/lib/chat";
 import {
   CHAT_UPLOAD_MAX_FILES,
@@ -64,26 +68,38 @@ export function ChatRoom({
   mode = "team",
   peer = null,
   conversationId = null,
+  groupName = null,
+  groupMembers = [],
   recentPeers = [],
+  recentGroups = [],
   initialDmUnreadByPeer = {},
+  initialGroupUnreadById = {},
 }: {
   currentUserId: string;
   teamId: string;
   teams: ChatTeamOption[];
   members: ChatMember[];
   initialMessages: ThreadMessage[];
-  mode?: "team" | "dm";
+  mode?: "team" | "dm" | "group";
   peer?: ChatMember | null;
   conversationId?: string | null;
+  groupName?: string | null;
+  groupMembers?: ChatMember[];
   recentPeers?: DirectPeer[];
+  recentGroups?: GroupConversationSummary[];
   initialDmUnreadByPeer?: DmUnreadByPeer;
+  initialGroupUnreadById?: GroupUnreadById;
 }) {
   const router = useRouter();
   const isDm = mode === "dm" && peer;
+  const isGroup = mode === "group" && conversationId;
   const [messages, setMessages] = useState(initialMessages);
   const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
   const [dmUnreadByPeer, setDmUnreadByPeer] = useState<DmUnreadByPeer>(
     initialDmUnreadByPeer,
+  );
+  const [groupUnreadById, setGroupUnreadById] = useState<GroupUnreadById>(
+    initialGroupUnreadById,
   );
   const [connected, setConnected] = useState(false);
   const [draft, setDraft] = useState("");
@@ -91,6 +107,7 @@ export function ChatRoom({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileToRemove, setFileToRemove] = useState<string | null>(null);
+  const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -98,11 +115,15 @@ export function ChatRoom({
 
   useEffect(() => {
     setMessages(initialMessages);
-  }, [initialMessages, teamId, conversationId, peer?.id]);
+  }, [initialMessages, teamId, conversationId, peer?.id, mode]);
 
   useEffect(() => {
     setDmUnreadByPeer(initialDmUnreadByPeer);
   }, [initialDmUnreadByPeer]);
+
+  useEffect(() => {
+    setGroupUnreadById(initialGroupUnreadById);
+  }, [initialGroupUnreadById]);
 
   useEffect(() => {
     if (peer?.id) {
@@ -116,6 +137,19 @@ export function ChatRoom({
       });
     }
   }, [peer?.id]);
+
+  useEffect(() => {
+    if (isGroup && conversationId) {
+      setGroupUnreadById((current) => {
+        if (!current[conversationId]) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[conversationId];
+        return next;
+      });
+    }
+  }, [isGroup, conversationId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -161,7 +195,7 @@ export function ChatRoom({
       });
 
       socket.on(CHAT_EVENTS.message, (message: ChatMessageDto) => {
-        if (isDm || message.teamId !== teamId) {
+        if (isDm || isGroup || message.teamId !== teamId) {
           return;
         }
 
@@ -190,14 +224,35 @@ export function ChatRoom({
           });
         }
 
-        // Unread badge: only count messages from the peer, not our own.
-        if (
-          message.author.id !== currentUserId &&
-          !viewingThisDm
-        ) {
+        if (message.author.id !== currentUserId && !viewingThisDm) {
           setDmUnreadByPeer((current) => ({
             ...current,
             [message.author.id]: (current[message.author.id] ?? 0) + 1,
+          }));
+        }
+      });
+
+      socket.on(CHAT_EVENTS.groupMessage, (message: GroupMessageDto) => {
+        const viewingThisGroup =
+          Boolean(isGroup) &&
+          Boolean(conversationId) &&
+          message.conversationId === conversationId;
+
+        if (viewingThisGroup) {
+          setMessages((current) => {
+            if (current.some((item) => item.id === message.id)) {
+              return current;
+            }
+
+            return [...current, message];
+          });
+        }
+
+        if (message.author.id !== currentUserId && !viewingThisGroup) {
+          setGroupUnreadById((current) => ({
+            ...current,
+            [message.conversationId]:
+              (current[message.conversationId] ?? 0) + 1,
           }));
         }
       });
@@ -224,7 +279,7 @@ export function ChatRoom({
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
-  }, [teamId, isDm, peer, conversationId, currentUserId]);
+  }, [teamId, isDm, isGroup, peer, conversationId, currentUserId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -317,6 +372,12 @@ export function ChatRoom({
         content,
         attachments: pendingFiles,
       });
+    } else if (isGroup && conversationId) {
+      socketRef.current.emit(CHAT_EVENTS.groupSend, {
+        conversationId,
+        content,
+        attachments: pendingFiles,
+      });
     } else {
       socketRef.current.emit(CHAT_EVENTS.send, {
         teamId,
@@ -336,11 +397,28 @@ export function ChatRoom({
     !uploading &&
     (draft.trim().length > 0 || pendingFiles.length > 0);
 
+  const emptyHint = isDm
+    ? `Brak wiadomości z ${peer?.name ?? "rozmówcą"}. Napisz pierwszą.`
+    : isGroup
+      ? "Brak wiadomości w tej grupie. Napisz pierwszą."
+      : "Brak wiadomości w tym zespole. Napisz pierwszą.";
+
+  const placeholder = !connected
+    ? "Czat jest offline"
+    : isDm
+      ? `Napisz do ${peer?.name ?? "rozmówcy"}…`
+      : isGroup
+        ? "Napisz do grupy… (emoji, Enter wyśle)"
+        : "Napisz wiadomość… (emoji, Enter wyśle)";
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden border bg-card shadow-sm lg:flex-row">
       <ChatReadMarker
-        teamId={isDm ? undefined : teamId}
+        teamId={isDm || isGroup ? undefined : teamId}
         conversationId={isDm ? (conversationId ?? undefined) : undefined}
+        groupConversationId={
+          isGroup ? (conversationId ?? undefined) : undefined
+        }
         messageCount={messages.length}
       />
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -375,6 +453,41 @@ export function ChatRoom({
                   </div>
                 </div>
               </div>
+            ) : isGroup ? (
+              <div className="space-y-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-0"
+                  render={<Link href={`/chat?team=${teamId}`} />}
+                >
+                  <ArrowLeft />
+                  Czat zespołu
+                </Button>
+                <div className="flex items-start gap-2">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                    <Users className="size-4 text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="truncate text-sm font-semibold">
+                      {groupName ?? "Grupa"}
+                    </h2>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {groupMembers.map((m) => m.name).join(", ")}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    aria-label="Usuń grupę"
+                    onClick={() => setDeleteGroupOpen(true)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div className="space-y-2">
                 <div>
@@ -382,7 +495,7 @@ export function ChatRoom({
                     Czat · {activeTeam?.name ?? "Zespół"}
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    Kanał zespołu — kliknij osobę po prawej, aby napisać prywatnie.
+                    Kanał zespołu — po prawej: klik = DM, Ctrl+A = grupa.
                   </p>
                 </div>
                 <label className="grid gap-1 text-xs text-muted-foreground">
@@ -424,11 +537,7 @@ export function ChatRoom({
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           {messages.length === 0 ? (
-            <p className="m-auto text-sm text-muted-foreground">
-              {isDm
-                ? `Brak wiadomości z ${peer?.name ?? "rozmówcą"}. Napisz pierwszą.`
-                : "Brak wiadomości w tym zespole. Napisz pierwszą."}
-            </p>
+            <p className="m-auto text-sm text-muted-foreground">{emptyHint}</p>
           ) : (
             messages.map((message) => {
               const mine = message.author.id === currentUserId;
@@ -554,13 +663,7 @@ export function ChatRoom({
                   send();
                 }
               }}
-              placeholder={
-                connected
-                  ? isDm
-                    ? `Napisz do ${peer?.name ?? "rozmówcy"}…`
-                    : "Napisz wiadomość… (emoji, Enter wyśle)"
-                  : "Czat jest offline"
-              }
+              placeholder={placeholder}
               maxLength={2000}
               rows={2}
               disabled={!connected}
@@ -582,8 +685,11 @@ export function ChatRoom({
         teamName={activeTeam?.name}
         teamId={teamId}
         activePeerUserId={peer?.id}
+        activeGroupId={isGroup ? conversationId : null}
         recentPeers={recentPeers}
+        recentGroups={recentGroups}
         dmUnreadByPeer={dmUnreadByPeer}
+        groupUnreadById={groupUnreadById}
       />
 
       <ConfirmDeleteDialog
@@ -605,6 +711,29 @@ export function ChatRoom({
           );
           setFileToRemove(null);
           toast.success("Usunięto załącznik z kolejki.");
+        }}
+      />
+
+      <ConfirmDeleteDialog
+        hideTrigger
+        open={deleteGroupOpen}
+        onOpenChange={setDeleteGroupOpen}
+        title="Usunąć grupę?"
+        description={`Grupa „${groupName ?? "bez nazwy"}” i cała jej historia znikną dla wszystkich członków.`}
+        confirmLabel="Usuń grupę"
+        onConfirm={async () => {
+          if (!conversationId) {
+            return;
+          }
+
+          const result = await deleteGroupConversationAction(conversationId);
+          if (result.error) {
+            toast.error(result.error);
+            throw new Error(result.error);
+          }
+
+          toast.success("Usunięto grupę.");
+          router.push(`/chat?team=${teamId}`);
         }}
       />
     </div>

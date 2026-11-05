@@ -49,3 +49,17 @@ export const directMessageSchema = z
     ...messageBodySchema,
   })
   .superRefine(requireContentOrAttachment);
+
+export const groupMessageSchema = z
+  .object({
+    conversationId: z.string().uuid("Wybierz grupę"),
+    ...messageBodySchema,
+  })
+  .superRefine(requireContentOrAttachment);
+
+export const createGroupConversationSchema = z.object({
+  memberIds: z
+    .array(z.string().uuid("Nieprawidłowy użytkownik"))
+    .min(2, "Zaznacz co najmniej 2 osoby")
+    .max(49, "Za dużo osób w grupie"),
+});

@@ -4,17 +4,22 @@ import { notFound, redirect } from "next/navigation";
 import { ChatRoom } from "@/components/chat/chat-room";
 import { requireUnrestrictedAuth } from "@/lib/auth-utils";
 import {
+  getGroupConversationForUser,
   getOrCreateDirectConversation,
   listChatMembers,
   listRecentChatMessages,
   listRecentDirectMessages,
   listRecentDirectPeers,
+  listRecentGroupConversations,
+  listRecentGroupMessages,
   listTeamsForChat,
 } from "@/lib/chat-data";
 import {
   countUnreadDirectByPeer,
+  countUnreadGroupById,
   markChatTeamRead,
   markDirectConversationRead,
+  markGroupConversationRead,
 } from "@/lib/chat-unread";
 import { DEFAULT_TEAM_ID } from "@/lib/rbac";
 
@@ -26,6 +31,7 @@ type ChatPageProps = {
   searchParams: Promise<{
     team?: string | string[];
     dm?: string | string[];
+    group?: string | string[];
   }>;
 };
 
@@ -51,12 +57,69 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
   const params = await searchParams;
   const requestedTeam = firstParam(params.team).trim();
   const requestedDm = firstParam(params.dm).trim();
+  const requestedGroup = firstParam(params.group).trim();
 
   const preferredTeam =
     teams.find((team) => team.id === requestedTeam)?.id ??
     teams.find((team) => team.id === session.user.teamId)?.id ??
     teams.find((team) => team.id === DEFAULT_TEAM_ID)?.id ??
     teams[0].id;
+
+  if (requestedGroup) {
+    const group = await getGroupConversationForUser(
+      requestedGroup,
+      session.user.id,
+    );
+
+    if (!group) {
+      notFound();
+    }
+
+    if (requestedTeam !== preferredTeam) {
+      redirect(`/chat?team=${preferredTeam}&group=${requestedGroup}`);
+    }
+
+    await markGroupConversationRead(session.user.id, group.conversationId);
+
+    const [messages, members, unreadByPeer, unreadByGroup] = await Promise.all([
+      listRecentGroupMessages(group.conversationId),
+      listChatMembers(preferredTeam),
+      countUnreadDirectByPeer(session.user.id),
+      countUnreadGroupById(session.user.id),
+    ]);
+    const [recentPeers, recentGroups] = await Promise.all([
+      listRecentDirectPeers(session.user.id, unreadByPeer),
+      listRecentGroupConversations(session.user.id, unreadByGroup),
+    ]);
+
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-semibold">Czat</h2>
+          <p className="text-sm text-muted-foreground">
+            Rozmowa grupowa · {group.name}
+          </p>
+        </div>
+
+        <ChatRoom
+          key={`group-${group.conversationId}`}
+          mode="group"
+          currentUserId={session.user.id}
+          teamId={preferredTeam}
+          teams={teams}
+          members={members}
+          initialMessages={messages}
+          conversationId={group.conversationId}
+          groupName={group.name}
+          groupMembers={group.members}
+          recentPeers={recentPeers}
+          recentGroups={recentGroups}
+          initialDmUnreadByPeer={unreadByPeer}
+          initialGroupUnreadById={unreadByGroup}
+        />
+      </div>
+    );
+  }
 
   if (requestedDm) {
     if (requestedDm === session.user.id) {
@@ -76,18 +139,18 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
       redirect(`/chat?team=${preferredTeam}&dm=${requestedDm}`);
     }
 
-    // Mark read before counting so this peer shows 0 unread.
     await markDirectConversationRead(session.user.id, dm.conversationId);
 
-    const [messages, members, unreadByPeer] = await Promise.all([
+    const [messages, members, unreadByPeer, unreadByGroup] = await Promise.all([
       listRecentDirectMessages(dm.conversationId),
       listChatMembers(preferredTeam),
       countUnreadDirectByPeer(session.user.id),
+      countUnreadGroupById(session.user.id),
     ]);
-    const recentPeers = await listRecentDirectPeers(
-      session.user.id,
-      unreadByPeer,
-    );
+    const [recentPeers, recentGroups] = await Promise.all([
+      listRecentDirectPeers(session.user.id, unreadByPeer),
+      listRecentGroupConversations(session.user.id, unreadByGroup),
+    ]);
 
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
@@ -110,7 +173,9 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
           peer={dm.peer}
           conversationId={dm.conversationId}
           recentPeers={recentPeers}
+          recentGroups={recentGroups}
           initialDmUnreadByPeer={unreadByPeer}
+          initialGroupUnreadById={unreadByGroup}
         />
       </div>
     );
@@ -120,23 +185,24 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
     redirect(`/chat?team=${preferredTeam}`);
   }
 
-  const [messages, members, unreadByPeer] = await Promise.all([
+  const [messages, members, unreadByPeer, unreadByGroup] = await Promise.all([
     listRecentChatMessages(preferredTeam),
     listChatMembers(preferredTeam),
     countUnreadDirectByPeer(session.user.id),
+    countUnreadGroupById(session.user.id),
     markChatTeamRead(session.user.id, preferredTeam),
   ]);
-  const recentPeers = await listRecentDirectPeers(
-    session.user.id,
-    unreadByPeer,
-  );
+  const [recentPeers, recentGroups] = await Promise.all([
+    listRecentDirectPeers(session.user.id, unreadByPeer),
+    listRecentGroupConversations(session.user.id, unreadByGroup),
+  ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
       <div className="space-y-1">
         <h2 className="text-2xl font-semibold">Czat</h2>
         <p className="text-sm text-muted-foreground">
-          Kanał zespołu albo rozmowa 1:1 — kliknij osobę na liście po prawej.
+          Kanał zespołu, DM albo grupa (Ctrl+klik lub Ctrl+A).
         </p>
       </div>
 
@@ -149,7 +215,9 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
         members={members}
         initialMessages={messages}
         recentPeers={recentPeers}
+        recentGroups={recentGroups}
         initialDmUnreadByPeer={unreadByPeer}
+        initialGroupUnreadById={unreadByGroup}
       />
     </div>
   );
