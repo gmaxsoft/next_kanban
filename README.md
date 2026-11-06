@@ -29,7 +29,7 @@ Główne ścieżki:
 - `/boards` — lista tablic (tworzenie tylko ADMINISTRATOR; tablica należy do zespołu)
 - `/boards/[id]` — tablica Kanban lub widok listy (dodawanie kart tylko ADMINISTRATOR)
 - `/boards/[id]/tasks/[taskId]` — strona szczegółów zadania (opis WYSIWYG, assignee, komentarze, @wzmianki)
-- `/chat` — czat w obrębie wybranego zespołu
+- `/chat` — czat zespołu, rozmowy 1:1 (DM) i grupy
 - `/users` — lista zespołu (edycja: ADMINISTRATOR wszystkich, Pracownik tylko siebie)
 - `/profile` — profil, zespół, zmiana hasła
 
@@ -182,7 +182,18 @@ Dla ticketów: webhook Resend **albo** IMAP (dane skrzynki w zespole + cron z `C
 - **Tickety** — webhook (sekrety w `.env`) lub IMAP (login/hasło skrzynki w **Ustawienia → Zespoły** + `CRON_SECRET` w `.env`) → zgłoszenia `[T-n]`; odpowiedź z panelu; karta Kanban. Instrukcja: [docs/TICKETS.md](./docs/TICKETS.md).
 - **Wyszukiwanie** — pole w nagłówku szuka tablic i zadań (wyniki zależne od roli).
 - **Pulpit** — ADMIN widzi statystyki całego systemu; Pracownik — własne zadania i skróty zespołu.
-- **Czat** — historia w MySQL, WebSocket; status Online od zalogowania (nie tylko na `/chat`); czerwona plakietka nieprzeczytanych przy pozycji „Czat” w menu.
+- **Czat** — historia w MySQL, WebSocket; status Online od zalogowania (nie tylko na `/chat`); czerwona plakietka nieprzeczytanych przy pozycji „Czat” w menu. Kanał zespołu, DM i grupy (patrz niżej).
+
+### Czat grupowy — jak zacząć
+
+1. Otwórz **Czat** (`/chat`) i upewnij się, że działa Socket.io (`npm run chat` / `npm run dev`).
+2. Na liście osób po prawej:
+   - **klik** — rozmowa prywatna (DM),
+   - **Ctrl+klik** — zaznaczanie osób do grupy,
+   - **Ctrl+A** albo przycisk **Zaznacz wszystkich** — zaznacz cały zespół.
+3. Gdy zaznaczysz **co najmniej 2 osoby**, kliknij **Utwórz grupę**.
+4. Grupa pojawi się w sekcji **Grupy**; ta sama lista osób otwiera istniejącą rozmowę.
+5. Kosz przy grupie (lista lub nagłówek) usuwa grupę i historię dla wszystkich członków.
 
 ## Struktura (skrót)
 
