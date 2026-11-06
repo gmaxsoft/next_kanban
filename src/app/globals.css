@@ -177,7 +177,9 @@
   }
 
   .prose-editor {
-    @apply text-foreground;
+    @apply max-w-full min-w-0 overflow-x-auto text-foreground;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .prose-editor :where(p, ul, ol, blockquote, pre, h2, h3) {
@@ -218,18 +220,36 @@
 
   .prose-editor :where(a) {
     @apply text-primary underline underline-offset-2;
+    overflow-wrap: anywhere;
   }
 
   .prose-editor :where(code) {
     @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em];
+    overflow-wrap: anywhere;
   }
 
   .prose-editor :where(pre) {
-    @apply overflow-x-auto rounded-md bg-muted p-2 font-mono text-[0.85em];
+    @apply max-w-full overflow-x-auto rounded-md bg-muted p-2 font-mono text-[0.85em];
+    white-space: pre-wrap;
   }
 
   .prose-editor :where(img) {
-    @apply my-2 max-h-80 max-w-full rounded-md border;
+    @apply my-2 h-auto max-h-80 max-w-full rounded-md border;
+  }
+
+  .prose-editor :where(table) {
+    @apply my-2 w-full max-w-full border-collapse text-left text-sm;
+    display: block;
+    overflow-x: auto;
+  }
+
+  .prose-editor :where(td, th) {
+    @apply border border-border px-2 py-1 align-top;
+    overflow-wrap: anywhere;
+  }
+
+  .prose-editor :where(div, span, p, li, h1, h2, h3, h4) {
+    max-width: 100%;
   }
 
   .tiptap p.is-editor-empty:first-child::before {

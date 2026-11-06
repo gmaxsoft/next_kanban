@@ -273,14 +273,14 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
         </CardContent>
       </Card>
 
-      <Card className="overflow-visible">
+      <Card className="min-w-0 overflow-visible">
         <CardHeader>
           <CardTitle>Historia konwersacji</CardTitle>
           <CardDescription>
             E-maile przychodzące, odpowiedzi oraz notatki wewnętrzne.
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-visible">
+        <CardContent className="min-w-0 overflow-visible">
           <TicketConversation
             currentUserId={session.user.id}
             isAdmin={isAdmin}

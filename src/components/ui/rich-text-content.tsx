@@ -1,11 +1,10 @@
-import { cn } from "cn";
-
 import {
   excerptFromRichText,
   isEmptyRichText,
   looksLikeHtml,
   sanitizeRichText,
 } from "@/lib/rich-text";
+import { cn } from "@/lib/utils";
 
 export function RichTextContent({
   value,
@@ -40,7 +39,7 @@ export function RichTextContent({
 
   return (
     <div
-      className={cn("prose-editor text-sm", className)}
+      className={cn("prose-editor min-w-0 max-w-full text-sm", className)}
       dangerouslySetInnerHTML={{
         __html: sanitizeRichText(value, { allowImages }),
       }}

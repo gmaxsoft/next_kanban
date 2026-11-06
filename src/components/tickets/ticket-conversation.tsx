@@ -75,7 +75,7 @@ export function TicketConversation({
           <li
             key={message.id}
             className={cn(
-              "relative overflow-visible rounded-xl border p-4",
+              "relative min-w-0 overflow-visible rounded-xl border p-4",
               message.kind === "INTERNAL" && "border-dashed bg-muted/30",
               message.kind === "OUTBOUND" && "border-primary/30 bg-primary/5",
             )}
@@ -112,29 +112,31 @@ export function TicketConversation({
               </p>
             ) : null}
 
-            {message.bodyHtml && message.kind === "INBOUND" ? (
-              <div
-                className="prose-editor max-w-none text-sm leading-6"
-                dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
-              />
-            ) : message.kind === "INTERNAL" ? (
-              <TicketInternalNote
-                messageId={message.id}
-                bodyText={message.bodyText ?? ""}
-                bodyHtml={message.bodyHtml}
-                canEdit={isAdmin || message.author?.id === currentUserId}
-                members={members}
-              />
-            ) : message.bodyHtml ? (
-              <RichTextContent
-                value={message.bodyHtml}
-                className="leading-6"
-              />
-            ) : (
-              <p className="whitespace-pre-wrap text-sm leading-6">
-                {message.bodyText || "(brak treści)"}
-              </p>
-            )}
+            <div className="min-w-0 max-w-full overflow-x-auto">
+              {message.bodyHtml && message.kind === "INBOUND" ? (
+                <div
+                  className="prose-editor text-sm leading-6"
+                  dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
+                />
+              ) : message.kind === "INTERNAL" ? (
+                <TicketInternalNote
+                  messageId={message.id}
+                  bodyText={message.bodyText ?? ""}
+                  bodyHtml={message.bodyHtml}
+                  canEdit={isAdmin || message.author?.id === currentUserId}
+                  members={members}
+                />
+              ) : message.bodyHtml ? (
+                <RichTextContent
+                  value={message.bodyHtml}
+                  className="leading-6"
+                />
+              ) : (
+                <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                  {message.bodyText || "(brak treści)"}
+                </p>
+              )}
+            </div>
             <TicketAttachments attachments={message.attachments} />
           </li>
         );
