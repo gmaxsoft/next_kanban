@@ -51,6 +51,7 @@ const statusSchema = z.enum([
   "RESOLVED",
   "CLOSED",
   "ON_HOLD",
+  "PENDING_VERIFICATION",
 ]);
 const prioritySchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
 
@@ -515,7 +516,8 @@ export async function addTicketInternalNote(
   const reopenToInProgress =
     ticket.status === "RESOLVED" ||
     ticket.status === "CLOSED" ||
-    ticket.status === "ON_HOLD";
+    ticket.status === "ON_HOLD" ||
+    ticket.status === "PENDING_VERIFICATION";
 
   await prisma.ticket.update({
     where: { id: ticketId },

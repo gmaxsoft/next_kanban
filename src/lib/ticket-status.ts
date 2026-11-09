@@ -3,17 +3,19 @@ import type { TicketStatus } from "@prisma/client";
 export const TICKET_STATUSES = [
   "OPEN",
   "IN_PROGRESS",
+  "PENDING_VERIFICATION",
+  "ON_HOLD",
   "RESOLVED",
   "CLOSED",
-  "ON_HOLD",
 ] as const satisfies readonly TicketStatus[];
 
 export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   OPEN: "Otwarte",
   IN_PROGRESS: "W trakcie",
+  PENDING_VERIFICATION: "Do weryfikacji",
+  ON_HOLD: "Na później",
   RESOLVED: "Rozwiązane",
   CLOSED: "Zamknięte",
-  ON_HOLD: "Na później",
 };
 
 export function ticketStatusLabel(status: TicketStatus) {

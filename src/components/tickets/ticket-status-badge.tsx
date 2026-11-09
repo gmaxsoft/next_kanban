@@ -9,9 +9,10 @@ const variantByStatus: Record<
 > = {
   OPEN: "destructive",
   IN_PROGRESS: "default",
+  PENDING_VERIFICATION: "secondary",
+  ON_HOLD: "outline",
   RESOLVED: "secondary",
   CLOSED: "outline",
-  ON_HOLD: "outline",
 };
 
 export function TicketStatusBadge({ status }: { status: TicketStatus }) {

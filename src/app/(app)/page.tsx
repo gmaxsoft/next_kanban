@@ -83,6 +83,7 @@ export default async function HomePage() {
     taskCount,
     openTicketCount,
     inProgressTicketCount,
+    pendingVerificationTicketCount,
     resolvedTicketCount,
     closedTicketCount,
     onHoldTicketCount,
@@ -109,6 +110,9 @@ export default async function HomePage() {
     }),
     prisma.ticket.count({
       where: { ...ticketScope, status: "IN_PROGRESS" },
+    }),
+    prisma.ticket.count({
+      where: { ...ticketScope, status: "PENDING_VERIFICATION" },
     }),
     prisma.ticket.count({
       where: { ...ticketScope, status: "RESOLVED" },
@@ -386,6 +390,9 @@ export default async function HomePage() {
           <div className="flex flex-wrap gap-2">
             <Badge variant="destructive">Otwarte: {openTicketCount}</Badge>
             <Badge>W trakcie: {inProgressTicketCount}</Badge>
+            <Badge variant="secondary">
+              Do weryfikacji: {pendingVerificationTicketCount}
+            </Badge>
             <Badge variant="secondary">
               Rozwiązane: {resolvedTicketCount}
             </Badge>

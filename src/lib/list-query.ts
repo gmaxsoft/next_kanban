@@ -146,7 +146,14 @@ export type TasksListFilters = {
 
 export type TicketsListFilters = {
   q: string;
-  status: "" | "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" | "ON_HOLD";
+  status:
+    | ""
+    | "OPEN"
+    | "IN_PROGRESS"
+    | "RESOLVED"
+    | "CLOSED"
+    | "ON_HOLD"
+    | "PENDING_VERIFICATION";
   team: string;
 };
 
@@ -181,6 +188,7 @@ export function parseTicketsListSearch(searchParams: {
       "RESOLVED",
       "CLOSED",
       "ON_HOLD",
+      "PENDING_VERIFICATION",
     ] as const),
     team: parseUuidParam(searchParams.team),
   };

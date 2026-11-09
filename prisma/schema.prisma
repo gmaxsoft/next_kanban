@@ -19,6 +19,7 @@ enum TicketStatus {
   RESOLVED
   CLOSED
   ON_HOLD
+  PENDING_VERIFICATION
 }
 
 enum TicketMessageKind {

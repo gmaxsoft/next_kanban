@@ -432,7 +432,8 @@ export async function processIncomingEmail(
             // Reopen archived / parked tickets back to active work.
             ...(ticket.status === "RESOLVED" ||
             ticket.status === "CLOSED" ||
-            ticket.status === "ON_HOLD"
+            ticket.status === "ON_HOLD" ||
+            ticket.status === "PENDING_VERIFICATION"
               ? { status: "IN_PROGRESS" as const, statusLocked: false }
               : {}),
           },
