@@ -230,8 +230,7 @@ function EditRoleButton({ role }: { role: RoleRow }) {
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Ograniczone: tylko menu Tickety i własne / wzmiankowane
-                  zgłoszenia.
+                  Ograniczone: Tickety (Zgłaszający / wzmianki) oraz Czat.
                 </p>
               )}
             </div>

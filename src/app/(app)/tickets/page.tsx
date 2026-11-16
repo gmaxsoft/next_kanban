@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import type { TicketsTableRow } from "@/components/tickets/tickets-data-table";
 import { TicketsListTabs } from "@/components/tickets/tickets-list-tabs";
 import { requireAuth } from "@/lib/auth-utils";
+import { prisma } from "@/lib/prisma";
 import { ticketStatusLabel } from "@/lib/ticket-status";
 import { listTickets } from "@/lib/tickets";
 
@@ -18,11 +19,25 @@ export default async function TicketsPage() {
   const isRestricted = session.user.isRestricted;
   const teamScope = session.user.teamId ?? "00000000-0000-0000-0000-000000000000";
 
+  let scopedEmail = session.user.email?.trim() ?? "";
+  if (isRestricted && !scopedEmail) {
+    const account = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { email: true },
+    });
+    scopedEmail = account?.email ?? "";
+  }
+
   const { items: tickets } = await listTickets(
     isAdmin
       ? {}
       : isRestricted
-        ? { scopedUserId: session.user.id }
+        ? {
+            scopedUser: {
+              id: session.user.id,
+              email: scopedEmail,
+            },
+          }
         : { team: teamScope },
     { page: 1, pageSize: 10_000 },
   );
@@ -82,7 +97,7 @@ export default async function TicketsPage() {
         <h2 className="text-2xl font-semibold tracking-tight">Tickety</h2>
         <p className="text-sm text-muted-foreground">
           {isRestricted
-            ? "Zgłoszenia przypisane do Ciebie oraz te, w których jesteś wspomniany w notatkach."
+            ? "Twoje zgłoszenia (jako Zgłaszający) oraz te, w których ktoś Cię wspomniał."
             : "Zgłoszenia z e-maili przychodzących przypisane do Twojego zespołu."}
         </p>
       </div>

@@ -9,22 +9,23 @@ export type TicketsListFilters = {
   q: string;
   status: "" | TicketStatus;
   team: string;
-  /** Restricted role: only assignee or internal-note mentions. */
-  scopedUserId?: string;
+  /** Restricted role: reporter (Zgłaszający) or note mentions. */
+  scopedUser?: { id: string; email: string };
 };
 
-/** Tickets visible to a restricted user. */
-export function restrictedTicketsWhere(
-  userId: string,
-): Prisma.TicketWhereInput {
+/** Tickets visible to a restricted user (own as Zgłaszający + mentions). */
+export function restrictedTicketsWhere(user: {
+  id: string;
+  email: string;
+}): Prisma.TicketWhereInput {
+  const email = user.email.trim().toLowerCase();
   return {
     OR: [
-      { assigneeId: userId },
+      { requesterEmail: email },
       {
         messages: {
           some: {
-            kind: "INTERNAL",
-            mentions: { some: { userId } },
+            mentions: { some: { userId: user.id } },
           },
         },
       },
@@ -34,17 +35,22 @@ export function restrictedTicketsWhere(
 
 export async function canUserAccessTicket(
   ticketId: string,
-  user: { id: string; isAdmin: boolean; isRestricted: boolean; teamId: string | null },
+  user: {
+    id: string;
+    isAdmin: boolean;
+    isRestricted: boolean;
+    teamId: string | null;
+    email?: string | null;
+  },
 ) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
     select: {
       id: true,
       teamId: true,
-      assigneeId: true,
+      requesterEmail: true,
       messages: {
         where: {
-          kind: "INTERNAL",
           mentions: { some: { userId: user.id } },
         },
         select: { id: true },
@@ -62,9 +68,18 @@ export async function canUserAccessTicket(
   }
 
   if (user.isRestricted) {
-    return (
-      ticket.assigneeId === user.id || ticket.messages.length > 0
-    );
+    let email = user.email?.trim().toLowerCase() ?? "";
+    if (!email) {
+      const account = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { email: true },
+      });
+      email = account?.email.trim().toLowerCase() ?? "";
+    }
+    const isRequester =
+      Boolean(email) &&
+      ticket.requesterEmail.trim().toLowerCase() === email;
+    return isRequester || ticket.messages.length > 0;
   }
 
   return !ticket.teamId || ticket.teamId === user.teamId;
@@ -247,8 +262,8 @@ export async function listTickets(
   if (filters.team) {
     and.push({ teamId: filters.team });
   }
-  if (filters.scopedUserId) {
-    and.push(restrictedTicketsWhere(filters.scopedUserId));
+  if (filters.scopedUser?.id && filters.scopedUser.email) {
+    and.push(restrictedTicketsWhere(filters.scopedUser));
   }
   if (query) {
     and.push({

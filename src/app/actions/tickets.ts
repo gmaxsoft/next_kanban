@@ -62,6 +62,7 @@ async function denyUnlessTicketAccess(
     isAdmin: boolean;
     isRestricted: boolean;
     teamId: string | null;
+    email?: string | null;
   },
 ) {
   const allowed = await canUserAccessTicket(ticketId, user);

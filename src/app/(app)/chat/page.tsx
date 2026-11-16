@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { ChatRoom } from "@/components/chat/chat-room";
-import { requireUnrestrictedAuth } from "@/lib/auth-utils";
+import { requireAuth } from "@/lib/auth-utils";
 import {
   getGroupConversationForUser,
   getOrCreateDirectConversation,
@@ -40,7 +40,7 @@ function firstParam(value?: string | string[]) {
 }
 
 export default async function ChatPage({ searchParams }: ChatPageProps) {
-  const session = await requireUnrestrictedAuth();
+  const session = await requireAuth();
   const teams = await listTeamsForChat();
 
   if (teams.length === 0) {

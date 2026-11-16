@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { denyIfRestricted } from "@/lib/auth-utils";
+import { requireAuth } from "@/lib/auth-utils";
 import { getOrCreateGroupConversation } from "@/lib/chat-data";
 import {
   countUnreadChatMessages,
@@ -14,11 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { createGroupConversationSchema } from "@/lib/validations/chat";
 
 export async function markChatTeamAsRead(teamId: string) {
-  const access = await denyIfRestricted();
-  if (access.error) {
-    return { error: access.error };
-  }
-  const session = access.session;
+  const session = await requireAuth();
 
   if (!teamId) {
     return { error: "Brak zespołu." as const };
@@ -43,11 +39,7 @@ export async function markChatTeamAsRead(teamId: string) {
 }
 
 export async function markDirectConversationAsRead(conversationId: string) {
-  const access = await denyIfRestricted();
-  if (access.error) {
-    return { error: access.error };
-  }
-  const session = access.session;
+  const session = await requireAuth();
 
   if (!conversationId) {
     return { error: "Brak rozmowy." as const };
@@ -78,11 +70,7 @@ export async function markDirectConversationAsRead(conversationId: string) {
 }
 
 export async function markGroupConversationAsRead(conversationId: string) {
-  const access = await denyIfRestricted();
-  if (access.error) {
-    return { error: access.error };
-  }
-  const session = access.session;
+  const session = await requireAuth();
 
   if (!conversationId) {
     return { error: "Brak grupy." as const };
@@ -110,11 +98,7 @@ export async function markGroupConversationAsRead(conversationId: string) {
 }
 
 export async function createGroupConversationAction(memberIds: string[]) {
-  const access = await denyIfRestricted();
-  if (access.error) {
-    return { error: access.error };
-  }
-  const session = access.session;
+  const session = await requireAuth();
 
   const parsed = createGroupConversationSchema.safeParse({ memberIds });
   if (!parsed.success) {
@@ -144,11 +128,7 @@ export async function createGroupConversationAction(memberIds: string[]) {
 }
 
 export async function deleteGroupConversationAction(conversationId: string) {
-  const access = await denyIfRestricted();
-  if (access.error) {
-    return { error: access.error };
-  }
-  const session = access.session;
+  const session = await requireAuth();
 
   if (!conversationId) {
     return { error: "Brak grupy." as const };

@@ -36,7 +36,7 @@ type NavItem = {
   href: string;
   icon: typeof LayoutDashboard;
   adminOnly?: boolean;
-  /** Hidden for tickets-only (Ograniczone) roles. */
+  /** Hidden for Ograniczone (tickets + chat only). */
   hideWhenRestricted?: boolean;
 };
 
@@ -51,7 +51,7 @@ const navItems: NavItem[] = [
   },
   { title: "Tickety", href: "/tickets", icon: Ticket },
   { title: "Tablice", href: "/boards", icon: Columns3, hideWhenRestricted: true },
-  { title: "Czat", href: "/chat", icon: MessageCircle, hideWhenRestricted: true },
+  { title: "Czat", href: "/chat", icon: MessageCircle },
   {
     title: "Ustawienia",
     href: "/settings",

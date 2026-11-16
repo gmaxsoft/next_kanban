@@ -52,6 +52,7 @@ export async function generateMetadata({
       isAdmin: session.user.isAdmin,
       isRestricted: session.user.isRestricted,
       teamId: session.user.teamId,
+      email: session.user.email,
     }))
   ) {
     return { title: "Ticket" };
@@ -76,6 +77,7 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
       isAdmin: session.user.isAdmin,
       isRestricted: session.user.isRestricted,
       teamId: session.user.teamId,
+      email: session.user.email,
     }))
   ) {
     notFound();

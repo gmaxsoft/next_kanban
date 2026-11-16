@@ -85,8 +85,8 @@ export default async function SettingsPage() {
             <CardHeader>
               <CardTitle>Role</CardTitle>
               <CardDescription>
-                Uprawnienia: Administrator, Standardowe lub Ograniczone (tylko
-                Tickety). Ról systemowych nie można usunąć.
+                Uprawnienia: Administrator, Standardowe lub Ograniczone (Tickety
+                i Czat). Ról systemowych nie można usunąć.
               </CardDescription>
             </CardHeader>
             <CardContent>

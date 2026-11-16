@@ -31,7 +31,7 @@ export async function requireAuth() {
   return session;
 }
 
-/** Blocks tickets-only (Ograniczone) users from non-ticket app areas. */
+/** Blocks Ograniczone users from areas outside tickets + chat. */
 export async function requireUnrestrictedAuth() {
   const session = await requireAuth();
 

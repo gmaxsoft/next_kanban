@@ -43,9 +43,12 @@ export function rolePermissionLabel(permission: RolePermission) {
   }
 }
 
-/** Paths allowed for restricted (tickets-only) users. */
+/** Paths allowed for restricted (tickets + chat) users. */
 export function isRestrictedAllowedPath(pathname: string) {
   if (pathname === "/tickets" || pathname.startsWith("/tickets/")) {
+    return true;
+  }
+  if (pathname === "/chat" || pathname.startsWith("/chat/")) {
     return true;
   }
   if (pathname === "/profile" || pathname.startsWith("/profile/")) {
@@ -57,7 +60,13 @@ export function isRestrictedAllowedPath(pathname: string) {
   if (pathname.startsWith("/api/tickets/")) {
     return true;
   }
-  // Notifications bell on tickets layout
+  if (pathname.startsWith("/api/chat")) {
+    return true;
+  }
+  if (pathname.startsWith("/uploads/chat/")) {
+    return true;
+  }
+  // Notifications bell on tickets/chat layout
   if (pathname.startsWith("/api/notifications")) {
     return true;
   }
