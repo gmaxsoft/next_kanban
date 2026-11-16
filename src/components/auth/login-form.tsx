@@ -9,7 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useActionToast } from "@/hooks/use-action-toast";
 
-export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
+export function LoginForm({
+  callbackUrl,
+  defaultEmail = "",
+}: {
+  callbackUrl: string;
+  defaultEmail?: string;
+}) {
   const [state, formAction, pending] = useActionState<AuthActionState, FormData>(
     login,
     null,
@@ -30,6 +36,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
           type="email"
           autoComplete="email"
           required
+          defaultValue={defaultEmail}
           placeholder="jan@firma.pl"
           className="h-12 border-foreground/20 bg-background px-3 text-base"
         />

@@ -1,7 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-
-import { Resend } from "resend";
-
+import { maybeAutoProvisionUserFromInbound } from "@/lib/auto-provision-user";
 import {
   findTeamByInboundAddress,
   formatTicketId,
@@ -17,6 +14,21 @@ import {
   type IncomingTicketAttachment,
 } from "@/lib/ticket-attachments.server";
 
+async function tryAutoProvisionSender(
+  email: IncomingEmailInput,
+  teamId: string | null,
+) {
+  try {
+    await maybeAutoProvisionUserFromInbound({
+      email: email.fromEmail,
+      name: email.fromName,
+      teamId,
+    });
+  } catch (error) {
+    console.error("[inbound-email] auto-provision nie powiódł się", error);
+  }
+}
+
 /** Uniwersalny obiekt e-maila dla webhooka i IMAP. */
 export type IncomingEmailInput = {
   fromEmail: string;
@@ -27,13 +39,13 @@ export type IncomingEmailInput = {
   html: string | null;
   messageId: string | null;
   attachments?: IncomingTicketAttachment[];
-  /** Identyfikator zewnętrzny (np. Resend email_id) — używany przy deduplikacji. */
+  /** Identyfikator zewnętrzny — używany przy deduplikacji. */
   externalId?: string | null;
 };
 
 /** @deprecated Użyj IncomingEmailInput — alias dla kompatybilności. */
 export type NormalizedInboundEmail = IncomingEmailInput & {
-  resendEmailId: string | null;
+  externalId: string | null;
 };
 
 export type ProcessIncomingEmailResult = {
@@ -119,11 +131,6 @@ async function sendPendingTicketAcknowledgement(ticketId: string) {
   return true;
 }
 
-function getResend() {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  return apiKey ? new Resend(apiKey) : null;
-}
-
 function asString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
@@ -153,85 +160,18 @@ export function verifySimpleWebhookSecret(request: Request) {
   return false;
 }
 
-function verifySvixSignature(rawBody: string, request: Request, secret: string) {
-  const id = request.headers.get("svix-id");
-  const timestamp = request.headers.get("svix-timestamp");
-  const signatureHeader = request.headers.get("svix-signature");
-
-  if (!id || !timestamp || !signatureHeader) {
-    return false;
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  const ts = Number.parseInt(timestamp, 10);
-  if (!Number.isFinite(ts) || Math.abs(now - ts) > 60 * 5) {
-    return false;
-  }
-
-  const key = secret.startsWith("whsec_")
-    ? Buffer.from(secret.slice("whsec_".length), "base64")
-    : Buffer.from(secret, "base64");
-
-  const signedContent = `${id}.${timestamp}.${rawBody}`;
-  const expected = createHmac("sha256", key).update(signedContent).digest("base64");
-
-  const candidates = signatureHeader
-    .split(" ")
-    .map((part) => part.trim())
-    .filter((part) => part.startsWith("v1,"))
-    .map((part) => part.slice(3));
-
-  return candidates.some((candidate) => {
-    try {
-      const left = Buffer.from(candidate);
-      const right = Buffer.from(expected);
-      return left.length === right.length && timingSafeEqual(left, right);
-    } catch {
-      return false;
-    }
-  });
-}
-
-export function verifyInboundWebhook(request: Request, rawBody: string) {
-  const resendSecret = process.env.RESEND_WEBHOOK_SECRET?.trim();
+export function verifyInboundWebhook(request: Request, _rawBody: string) {
   const simpleSecret = process.env.INBOUND_EMAIL_WEBHOOK_SECRET?.trim();
-
-  if (resendSecret && request.headers.get("svix-signature")) {
-    try {
-      const resend = getResend();
-      if (resend?.webhooks?.verify) {
-        resend.webhooks.verify({
-          payload: rawBody,
-          headers: {
-            id: request.headers.get("svix-id") ?? "",
-            timestamp: request.headers.get("svix-timestamp") ?? "",
-            signature: request.headers.get("svix-signature") ?? "",
-          },
-          webhookSecret: resendSecret,
-        });
-        return true;
-      }
-    } catch {
-      // fall through to manual Svix check
-    }
-
-    if (verifySvixSignature(rawBody, request, resendSecret)) {
-      return true;
-    }
-  }
-
   const simple = verifySimpleWebhookSecret(request);
   if (simple === true) {
     return true;
   }
 
-  if (!resendSecret && !simpleSecret) {
-    if (process.env.NODE_ENV === "development") {
-      console.warn(
-        "[inbound-email] brak RESEND_WEBHOOK_SECRET / INBOUND_EMAIL_WEBHOOK_SECRET — pomijam weryfikację (dev)",
-      );
-      return true;
-    }
+  if (!simpleSecret && process.env.NODE_ENV === "development") {
+    console.warn(
+      "[inbound-email] brak INBOUND_EMAIL_WEBHOOK_SECRET — pomijam weryfikację (dev)",
+    );
+    return true;
   }
 
   return false;
@@ -276,57 +216,25 @@ export async function normalizeInboundPayload(
 
   const root = payload as Record<string, unknown>;
 
-  if (asString(root.type) === "email.received" && root.data && typeof root.data === "object") {
+  // Legacy nested shape (optional); body must be present in the payload — no external API.
+  if (
+    asString(root.type) === "email.received" &&
+    root.data &&
+    typeof root.data === "object"
+  ) {
     const data = root.data as Record<string, unknown>;
-    const emailId = asString(data.email_id);
-    const fromRaw = asString(data.from);
-    const subject = asString(data.subject);
-    const toAddresses = [
-      ...asStringArray(data.to),
-      ...asStringArray(data.received_for),
-    ];
-    const messageId = asString(data.message_id) || null;
-
-    let text: string | null = null;
-    let html: string | null = null;
-    let fromName: string | null = null;
-
-    const resend = getResend();
-    if (resend && emailId) {
-      try {
-        const { data: email, error } = await resend.emails.receiving.get(emailId);
-        if (!error && email) {
-          text = email.text ?? null;
-          html = email.html ?? null;
-          const headerFrom =
-            email.headers && typeof email.headers === "object"
-              ? asString((email.headers as Record<string, string>).from)
-              : "";
-          if (headerFrom) {
-            fromName = parseEmailAddress(headerFrom).name;
-          }
-        }
-      } catch (error) {
-        console.error("[inbound-email] nie udało się pobrać treści Resend", error);
-      }
-    }
-
-    if (!fromRaw || !subject) {
-      return null;
-    }
-
-    const parsedFrom = parseEmailAddress(fromRaw);
-
-    return {
-      fromEmail: parsedFrom.email,
-      fromName: fromName ?? parsedFrom.name,
-      toAddresses,
-      subject,
-      text,
-      html,
-      messageId,
-      externalId: emailId || null,
-    };
+    return normalizeFlatPayload({
+      from: data.from,
+      to: data.to,
+      received_for: data.received_for,
+      subject: data.subject,
+      text: data.text,
+      html: data.html,
+      body: data.body,
+      plain: data.plain,
+      message_id: data.message_id,
+      email_id: data.email_id,
+    });
   }
 
   return normalizeFlatPayload(root);
@@ -454,6 +362,7 @@ export async function processIncomingEmail(
       }
 
       await storeTicketAttachments(createdMessage.id, email.attachments);
+      await tryAutoProvisionSender(email, teamId);
 
       return {
         ticketId: ticket.id,
@@ -503,7 +412,8 @@ export async function processIncomingEmail(
     `[inbound-email] nowy ticket ${formatTicketId(created.number)} od ${email.fromEmail}`,
   );
 
-    const acknowledgementSent = await sendPendingTicketAcknowledgement(created.id);
+  const acknowledgementSent = await sendPendingTicketAcknowledgement(created.id);
+  await tryAutoProvisionSender(email, teamId);
 
   return {
     ticketId: created.id,
@@ -527,10 +437,7 @@ export async function ingestInboundEmail(
     text: email.text,
     html: email.html,
     messageId: email.messageId,
-    externalId:
-      email.externalId ??
-      ("resendEmailId" in email ? email.resendEmailId : null) ??
-      null,
+    externalId: email.externalId ?? null,
   };
 
   return processIncomingEmail(normalized, options);

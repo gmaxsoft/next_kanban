@@ -85,7 +85,7 @@ describe("POST /api/webhooks/inbound-email", () => {
     });
   });
 
-  it("ignores non email.received Resend events", async () => {
+  it("ignores non email.received webhook events", async () => {
     verifyInboundWebhook.mockReturnValue(true);
     const { POST } = await import("@/app/api/webhooks/inbound-email/route");
 

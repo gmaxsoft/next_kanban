@@ -14,7 +14,7 @@ Tablica Kanban dla zespołu: konta (ADMINISTRATOR / Pracownik), tablice i zadani
 | Auth | **Auth.js (NextAuth v5)** — Credentials + JWT, adapter Prisma |
 | Baza | **Prisma 6** + **MySQL / MariaDB** |
 | Kanban DnD | **@dnd-kit** |
-| E-mail / tickety | **Resend** (outbound + Inbound webhooks) + **react-email** |
+| E-mail / tickety | **IMAP/SMTP zespołu** (nodemailer) + **react-email**; opcjonalny webhook JSON |
 | Czat | **Socket.io** (osobny proces Node.js) |
 | Walidacja | **Zod 4** |
 
@@ -42,8 +42,8 @@ Webhook / cron (publiczne, chronione sekretem — nie sesją Auth.js):
 
 | Tryb | Login / hasło skrzynki | Co ustawić |
 | --- | --- | --- |
-| **Webhook** (Resend itd.) | **Nie** w Kanbanie | Sekret w `.env` + URL u dostawcy |
-| **IMAP** | **Tak** — w panelu aplikacji | Ustawienia → Zespoły → tryb IMAP |
+| **Webhook** (JSON) | **Nie** w Kanbanie | `INBOUND_EMAIL_WEBHOOK_SECRET` + URL u dostawcy |
+| **IMAP** (zalecane) | **Tak** — w panelu aplikacji | Ustawienia → Zespoły → tryb IMAP |
 
 Przy **IMAP** podajesz host, port, TLS, użytkownika, hasło i folder (`INBOX`) przy edycji zespołu. Hasło trafia do bazy (`Team.imapPassword`); przy kolejnej edycji puste pole zostawia dotychczasowe hasło.
 
@@ -84,12 +84,7 @@ SEED_ADMIN_EMAIL="admin@kanban.local"
 SEED_ADMIN_PASSWORD="ChangeMe123!"
 SEED_ADMIN_NAME="Administrator"
 
-# E-mail (Resend) — bez klucza UI działa, maile są pomijane
-RESEND_API_KEY=""
-EMAIL_FROM="Next Kanban <onboarding@resend.dev>"
-
-# Tickety (inbound webhook) — szczegóły w docs/TICKETS.md
-RESEND_WEBHOOK_SECRET=""
+# Tickety — opcjonalny webhook JSON (zalecane: IMAP w Ustawienia → Zespoły)
 INBOUND_EMAIL_WEBHOOK_SECRET=""
 
 # Cron IMAP — Bearer dla /api/cron/check-imap (nie hasło skrzynki!)
@@ -160,7 +155,7 @@ npm run start:all
 
 `npm start` uruchamia sam Next.js. Czat wymaga osobnego procesu (`start:all` albo `tsx server/socket.ts`).
 
-Dla ticketów: webhook Resend **albo** IMAP (dane skrzynki w zespole + cron z `CRON_SECRET`). Szczegóły: [docs/TICKETS.md](./docs/TICKETS.md).
+Dla ticketów: **IMAP** (zalecane: dane skrzynki w zespole + cron z `CRON_SECRET`) albo opcjonalny webhook JSON. Wysyłka maili (odpowiedzi, aktywacja, powiadomienia) idzie **SMTP zespołu**. Szczegóły: [docs/TICKETS.md](./docs/TICKETS.md).
 
 ## Przydatne skrypty
 
@@ -178,8 +173,8 @@ Dla ticketów: webhook Resend **albo** IMAP (dane skrzynki w zespole + cron z `C
 - **Role i zespoły** — ADMINISTRATOR zarządza tablicami, zadaniami, ticketami, użytkownikami, rolami i zespołami; Pracownik pracuje w swoim zakresie (bez dodawania kart / bez `/tasks` i `/tickets`).
 - **Kanban** — widok tablicy i listy; przeciąganie zadań między kolumnami; filtry i paginacja list.
 - **Szczegóły zadania** — dedykowana strona z opisem TipTap, assignee, terminem i komentarzami; `@imię` w komentarzu wysyła e-mail i tworzy powiadomienie w aplikacji.
-- **Powiadomienia** — dzwonek w nagłówku (nieprzeczytane, oznaczanie jako przeczytane); także e-mail przy przypisaniu i komentarzu (Resend, wysyłka w tle).
-- **Tickety** — webhook (sekrety w `.env`) lub IMAP (login/hasło skrzynki w **Ustawienia → Zespoły** + `CRON_SECRET` w `.env`) → zgłoszenia `[T-n]`; odpowiedź z panelu; karta Kanban. Instrukcja: [docs/TICKETS.md](./docs/TICKETS.md).
+- **Powiadomienia** — dzwonek w nagłówku; e-mail przy przypisaniu/komentarzu przez SMTP zespołu.
+- **Tickety** — IMAP (zalecane) lub webhook JSON → zgłoszenia `[T-n]`; odpowiedź z panelu SMTP; karta Kanban. Instrukcja: [docs/TICKETS.md](./docs/TICKETS.md).
 - **Wyszukiwanie** — pole w nagłówku szuka tablic i zadań (wyniki zależne od roli).
 - **Pulpit** — ADMIN widzi statystyki całego systemu; Pracownik — własne zadania i skróty zespołu.
 - **Czat** — historia w MySQL, WebSocket; status Online od zalogowania (nie tylko na `/chat`); czerwona plakietka nieprzeczytanych przy pozycji „Czat” w menu. Kanał zespołu, DM i grupy (patrz niżej).

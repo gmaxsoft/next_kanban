@@ -2,10 +2,10 @@
 
 System ticketów tworzy zgłoszenia z **przychodzących e-maili**. Dostępne są **dwie metody odbioru**, które korzystają z tej samej warstwy serwisowej `processIncomingEmail`:
 
-1. **Webhook** — `POST /api/webhooks/inbound-email` (Resend Inbound / JSON)
-2. **IMAP** — `GET|POST /api/cron/check-imap` (poll skrzynek zespołów z `inboundType=IMAP`)
+1. **IMAP** (zalecane) — `GET|POST /api/cron/check-imap` (poll skrzynek zespołów z `inboundType=IMAP`)
+2. **Webhook** — `POST /api/webhooks/inbound-email` (prosty JSON + `INBOUND_EMAIL_WEBHOOK_SECRET`)
 
-Każdy zespół może mieć własną skrzynkę (np. `it@pwginfo.pl`). Odpowiedzi z panelu idą do klienta przez Resend z numerem ticketu w temacie (`[T-101]`).
+Każdy zespół może mieć własną skrzynkę (np. `it@pwginfo.pl`). Odpowiedzi z panelu i powiadomienia idą **SMTP zespołu** (host z IMAP → `smtp.…`) z numerem ticketu w temacie (`[T-101]`).
 
 Tickety mają **priorytet** (`LOW` / `MEDIUM` / `HIGH`, domyślnie `MEDIUM`) — ustawiany z listy lub ze szczegółów zgłoszenia.
 
@@ -37,17 +37,13 @@ Dostęp do `/tickets` mają tylko konta **ADMINISTRATOR**.
 
 | Zmienna | Opis |
 | --- | --- |
-| `RESEND_API_KEY` | Klucz API Resend — treść Inbound + wysyłka odpowiedzi |
-| `EMAIL_FROM` | Adres nadawcy odpowiedzi |
-| `RESEND_WEBHOOK_SECRET` | Signing secret webhooka Resend (Svix) |
-| `INBOUND_EMAIL_WEBHOOK_SECRET` | Bearer / `x-webhook-secret` dla prostego JSON |
+| `INBOUND_EMAIL_WEBHOOK_SECRET` | Bearer / `x-webhook-secret` dla opcjonalnego webhooka JSON |
 | `CRON_SECRET` | Bearer dla `/api/cron/check-imap` |
-| `AUTH_URL` | Publiczny URL aplikacji |
+| `AUTH_URL` | Publiczny URL aplikacji (linki w mailach) |
+
+Wysyłka i odbiór poczty zespołu: **Ustawienia → Zespoły** (IMAP → SMTP). Zewnętrzny ESP nie jest wymagany.
 
 ```env
-RESEND_API_KEY="re_..."
-EMAIL_FROM="Support <support@twoja-domena.pl>"
-RESEND_WEBHOOK_SECRET="whsec_..."
 INBOUND_EMAIL_WEBHOOK_SECRET="silny-losowy-sekret"
 CRON_SECRET="silny-losowy-cron-sekret"
 AUTH_URL="https://kanban.twoja-domena.pl"
@@ -87,7 +83,7 @@ Cron / `curl` musi wysłać dokładnie tę wartość:
 Authorization: Bearer k8fQ2...wynik-komendy...
 ```
 
-**Bezpieczeństwo:** w produkcji ustaw sekrety. Webhook i cron są poza sesją Auth.js — chroni je wyłącznie Bearer / podpis Svix.
+**Bezpieczeństwo:** w produkcji ustaw sekrety. Webhook i cron są poza sesją Auth.js — chroni je `INBOUND_EMAIL_WEBHOOK_SECRET` / `CRON_SECRET`.
 
 ---
 
@@ -115,7 +111,7 @@ Następnie wywołują `processIncomingEmail(...)`, która:
 1. Zaloguj się jako ADMINISTRATOR.
 2. **Ustawienia → Zespoły** → utwórz / edytuj zespół.
 3. Uzupełnij **Skrzynka ticketów** oraz **Tryb odbioru**:
-   - **Webhook** — maile trafiają przez Resend/JSON na wspólny endpoint; zespół wybierany po adresie `to`.
+   - **Webhook** — opcjonalny JSON na wspólny endpoint; zespół wybierany po adresie `to`.
    - **IMAP** — podaj host, port, użytkownika, hasło, TLS, folder (`INBOX`); cron odpytuje tylko te zespoły.
 
 ---
@@ -167,26 +163,9 @@ Oczekiwana odpowiedź:
 
 ---
 
-## Konfiguracja Resend Inbound
-
-1. W panelu Resend włącz **Receiving** dla domeny / adresu.
-2. **Webhooks → Add Webhook**
-   - URL: `https://TWOJA-DOMENA/api/webhooks/inbound-email`
-   - Event: `email.received`
-3. Skopiuj **signing secret** do `RESEND_WEBHOOK_SECRET`.
-4. Upewnij się, że `RESEND_API_KEY` ma uprawnienia do odczytu received emails — webhook Resend zawiera tylko metadane; aplikacja dociąga treść przez `emails.receiving.get(email_id)`.
-
-Przekieruj skrzynki zespołów (MX / forward) na adresy Inbound Resend albo użyj aliasów domeny podpiętej w Resend.
-
----
-
 ## Format webhooka (JSON)
 
-### A) Resend — event `email.received`
-
-Aplikacja rozpoznaje payload z `type: "email.received"` i polem `data` (`from`, `to`, `subject`, `message_id`, `email_id`, …). Treść HTML/text pobierana jest z API Resend.
-
-### B) Prosty JSON (testy / inny provider)
+Opcjonalny provider zewnętrzny może POSTować JSON na `/api/webhooks/inbound-email` (treść musi być w payloadzie — aplikacja nie dociąga jej z zewnętrznego API):
 
 ```json
 {
@@ -222,6 +201,18 @@ Authorization: Bearer silny-losowy-sekret
 
 Statusy: `Otwarte` · `W trakcie` · `Do weryfikacji` · `Rozwiązane` · `Zamknięte` · `Na później`. Lista ma zakładki **Bieżące** (bez Rozwiązane/Zamknięte) i **Archiwalne**. Nowe inbound, **notatka wewnętrzna** lub odpowiedź agenta po Rozwiązane / Zamknięte / Na później / Do weryfikacji wraca ticket na Bieżące ze statusem **W trakcie** (także gdy status był ustawiony ręcznie).
 
+### Auto-konto z maila (RESTRICTED)
+
+Gdy nadawca z domeny **`pwg.info.pl`** lub **`pwginfo.pl`** (ochrona przed spamem) napisze na skrzynkę zespołu i nie ma jeszcze konta, system:
+
+1. tworzy użytkownika z rolą **Ograniczone (RESTRICTED)** (Tickety jako Zgłaszający / wzmianki + Czat), przypisanego do zespołu skrzynki,
+2. konto jest nieaktywne do czasu ustawienia hasła,
+3. wysyła e-mail aktywacyjny **SMTP zespołu** (host z IMAP → `smtp.…`, jak potwierdzenia ticketów) z linkiem `/activate?token=…` (ważność 7 dni).
+
+Wymaga skonfigurowanego IMAP zespołu (host `imap.*`, user, hasło, `inboundEmail`).
+
+Po kliknięciu linku użytkownik ustawia hasło i może się zalogować (dostęp głównie do ticketów). Inne domeny **nie** dostają konta.
+
 ---
 
 ## Praca w panelu
@@ -239,7 +230,7 @@ Statusy: `Otwarte` · `W trakcie` · `Do weryfikacji` · `Rozwiązane` · `Zamkn
 | Zmień status | Otwarte / W trakcie / Do weryfikacji / Rozwiązane / Zamknięte / Na później |
 | Zapisz zespół | Ręczny wybór zespołu (nadpisuje auto-mapowanie) |
 | Utwórz zadanie na tablicy Kanban | Karta w kolumnie „Do zrobienia” / „To Do” / pierwszej kolumnie; tytuł `[T-101] …`; link ticket ↔ task |
-| Wyślij e-mail | Odpowiedź do nadawcy; temat `Re: [T-101] …`; wymaga `RESEND_API_KEY` |
+| Wyślij e-mail | Odpowiedź do nadawcy SMTP zespołu; temat `Re: [T-101] …` |
 | Notatka wewnętrzna | Tylko w panelu, bez maila |
 
 ---
@@ -272,7 +263,7 @@ curl -X POST http://localhost:3000/api/webhooks/inbound-email ^
 
 Na Windows PowerShell możesz użyć `Invoke-WebRequest` zamiast `curl`.
 
-Do testów z internetu (Resend → localhost) użyj tunelu (ngrok, Cloudflare Tunnel) i podaj publiczny URL webhooka.
+Do testów webhooka z internetu → localhost użyj tunelu (ngrok, Cloudflare Tunnel).
 
 ---
 
@@ -295,11 +286,11 @@ Do testów z internetu (Resend → localhost) użyj tunelu (ngrok, Cloudflare Tu
 
 | Objaw | Co sprawdzić |
 | --- | --- |
-| `401 Unauthorized webhook` | Sekret / nagłówki Svix; raw body przy weryfikacji |
+| `401 Unauthorized webhook` | `INBOUND_EMAIL_WEBHOOK_SECRET` (Bearer / `x-webhook-secret`) |
 | `401` na `/api/cron/check-imap` | `Authorization: Bearer CRON_SECRET` |
-| Ticket bez treści (Resend) | `RESEND_API_KEY` + Receiving API |
+| Ticket bez treści (webhook) | JSON musi zawierać `text` / `html` |
 | IMAP: 0 fetched | `inboundType=IMAP`, host/user/hasło, folder, UNSEEN |
 | IMAP: błędy połączenia | port/TLS, firewall, app password |
 | Ticket bez zespołu (webhook) | `inboundEmail` zgodny z `to` |
-| Odpowiedź nie dochodzi | `RESEND_API_KEY`, `EMAIL_FROM`, domena |
+| Odpowiedź nie dochodzi | IMAP→SMTP zespołu (`imap.*` → `smtp.*`), user/hasło |
 | Duplikat nie tworzy drugiego ticketu | Ten sam `Message-ID` — zamierzone |

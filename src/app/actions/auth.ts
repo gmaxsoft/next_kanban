@@ -15,9 +15,11 @@ import {
 } from "@/lib/avatar-uploads.server";
 import { isRestrictedAllowedPath } from "@/lib/rbac";
 import { safeCallbackUrl } from "@/lib/user";
+import { hashActivationToken } from "@/lib/auto-provision-user";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import {
+  activateAccountSchema,
   changePasswordSchema,
   createUserSchema,
   firstZodError,
@@ -29,6 +31,63 @@ export type AuthActionState = {
   error?: string;
   success?: string;
 } | null;
+
+export async function activateAccount(
+  _prevState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const parsed = activateAccountSchema.safeParse({
+    token: String(formData.get("token") ?? ""),
+    password: String(formData.get("password") ?? ""),
+    confirmPassword: String(formData.get("confirmPassword") ?? ""),
+  });
+
+  if (!parsed.success) {
+    return { error: firstZodError(parsed.error) };
+  }
+
+  const tokenHash = hashActivationToken(parsed.data.token);
+  const user = await prisma.user.findFirst({
+    where: {
+      activationTokenHash: tokenHash,
+      isActive: false,
+    },
+    select: {
+      id: true,
+      email: true,
+      activationTokenExpiresAt: true,
+    },
+  });
+
+  if (!user) {
+    return {
+      error: "Link aktywacyjny jest nieprawidłowy lub konto jest już aktywne.",
+    };
+  }
+
+  if (
+    !user.activationTokenExpiresAt ||
+    user.activationTokenExpiresAt.getTime() <= Date.now()
+  ) {
+    return {
+      error:
+        "Link aktywacyjny wygasł. Wyślij ponownie e-mail na HelpDesk, aby dostać nowy.",
+    };
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash: await hashPassword(parsed.data.password),
+      isActive: true,
+      emailVerified: new Date(),
+      activationTokenHash: null,
+      activationTokenExpiresAt: null,
+    },
+  });
+
+  redirect(`/login?activated=1&email=${encodeURIComponent(user.email)}`);
+}
 
 export async function login(
   _prevState: AuthActionState,

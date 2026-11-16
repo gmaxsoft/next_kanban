@@ -7,7 +7,7 @@ import {
 } from "@/lib/auth-session";
 import { isRestrictedAllowedPath } from "@/lib/rbac";
 
-const publicRoutes = ["/login"];
+const publicRoutes = ["/login", "/activate"];
 
 export const authConfig = {
   trustHost: true,

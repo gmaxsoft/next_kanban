@@ -1,15 +1,14 @@
-import type { ReactElement, ReactNode } from "react";
-import { after } from "next/server";
+import type { ReactElement } from "react";
 import { render } from "@react-email/render";
 import { createTransport } from "nodemailer";
-import { Resend } from "resend";
 
+import { AccountActivationEmail } from "@/emails/account-activation";
 import { HelpdeskNotificationEmail } from "@/emails/helpdesk-notification";
-import { TaskAssignedEmail } from "@/emails/task-assigned";
 import { TaskCommentedEmail } from "@/emails/task-commented";
 import { TicketAcknowledgedEmail } from "@/emails/ticket-acknowledged";
 import { TicketReplyEmail } from "@/emails/ticket-reply";
 import { TicketStatusChangedEmail } from "@/emails/ticket-status-changed";
+import { prisma } from "@/lib/prisma";
 
 function appUrl() {
   return (process.env.AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -21,6 +20,10 @@ export function taskUrl(boardId: string, taskId: string) {
 
 export function ticketUrl(ticketId: string) {
   return `${appUrl()}/tickets/${ticketId}`;
+}
+
+export function accountActivationUrl(token: string) {
+  return `${appUrl()}/activate?token=${encodeURIComponent(token)}`;
 }
 
 export function absoluteAppUrl(path: string) {
@@ -41,37 +44,8 @@ export function excerpt(value: string, max = 240) {
   return `${trimmed.slice(0, max - 1)}…`;
 }
 
-function getClient() {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-
-  if (!apiKey) {
-    return null;
-  }
-
-  return new Resend(apiKey);
-}
-
-function fromAddress() {
-  const configured = process.env.EMAIL_FROM?.trim();
-  if (configured) {
-    // Prefer HelpDesk branding if env still says Next Kanban.
-    return configured.replace(/^Next Kanban\b/i, "HelpDesk");
-  }
-  return "HelpDesk <onboarding@resend.dev>";
-}
-
 function helpdeskFrom(inboundEmail: string) {
   return `HelpDesk <${inboundEmail}>`;
-}
-
-function scheduleMail(work: () => Promise<void>) {
-  after(async () => {
-    try {
-      await work();
-    } catch (error) {
-      console.error("[mail] wysyłka nie powiodła się", error);
-    }
-  });
 }
 
 async function renderEmail(react: ReactElement) {
@@ -96,64 +70,48 @@ function createSmtpTransport(input: {
   });
 }
 
-async function sendReactEmail({
-  to,
-  subject,
-  react,
-  replyTo,
-}: {
-  to: string;
-  subject: string;
-  react: ReactNode;
-  replyTo?: string;
-}) {
-  const resend = getClient();
+type TeamSmtp = {
+  inboundEmail: string;
+  smtpHost: string;
+  smtpUser: string;
+  smtpPassword: string;
+};
 
-  if (!resend) {
-    console.info(
-      `[mail] pominięto „${subject}” do ${to} — brak RESEND_API_KEY`,
-    );
-    return;
-  }
-
-  const { error } = await resend.emails.send({
-    from: fromAddress(),
-    to,
-    subject,
-    react,
-    ...(replyTo ? { replyTo } : {}),
+async function teamSmtpForBoard(boardId: string): Promise<TeamSmtp | null> {
+  const board = await prisma.board.findUnique({
+    where: { id: boardId },
+    select: {
+      team: {
+        select: {
+          inboundEmail: true,
+          imapHost: true,
+          imapUser: true,
+          imapPassword: true,
+        },
+      },
+    },
   });
 
-  if (error) {
-    console.error("[mail] Resend odrzucił wiadomość", error);
+  const team = board?.team;
+  if (
+    !team?.inboundEmail ||
+    !team.imapHost?.startsWith("imap.") ||
+    !team.imapUser ||
+    !team.imapPassword
+  ) {
+    return null;
   }
+
+  return {
+    inboundEmail: team.inboundEmail,
+    smtpHost: team.imapHost.replace(/^imap\./i, "smtp."),
+    smtpUser: team.imapUser,
+    smtpPassword: team.imapPassword,
+  };
 }
 
-export function notifyTaskAssigned(input: {
-  toEmail: string;
-  assigneeName: string;
-  actorName: string;
-  taskTitle: string;
-  boardTitle: string;
-  boardId: string;
-  taskId: string;
-}) {
-  scheduleMail(async () => {
-    await sendReactEmail({
-      to: input.toEmail,
-      subject: `Przypisano Cię do zadania: ${input.taskTitle}`,
-      react: TaskAssignedEmail({
-        assigneeName: input.assigneeName,
-        actorName: input.actorName,
-        taskTitle: input.taskTitle,
-        boardTitle: input.boardTitle,
-        taskUrl: taskUrl(input.boardId, input.taskId),
-      }),
-    });
-  });
-}
-
-export function notifyTaskCommented(input: {
+/** Mention / comment mail for users outside the assignee/watcher set. */
+export async function notifyTaskCommented(input: {
   toEmail: string;
   assigneeName: string;
   actorName: string;
@@ -164,23 +122,41 @@ export function notifyTaskCommented(input: {
   taskId: string;
   mentioned?: boolean;
 }) {
-  scheduleMail(async () => {
-    await sendReactEmail({
+  const smtp = await teamSmtpForBoard(input.boardId);
+  if (!smtp) {
+    console.info(
+      `[mail] pominięto komentarz do ${input.toEmail} — brak SMTP zespołu`,
+    );
+    return;
+  }
+
+  const transporter = createSmtpTransport(smtp);
+  const { html, text } = await renderEmail(
+    TaskCommentedEmail({
+      assigneeName: input.assigneeName,
+      actorName: input.actorName,
+      taskTitle: input.taskTitle,
+      boardTitle: input.boardTitle,
+      commentExcerpt: excerpt(input.comment),
+      taskUrl: taskUrl(input.boardId, input.taskId),
+      mentioned: input.mentioned,
+    }),
+  );
+
+  try {
+    await transporter.sendMail({
+      from: helpdeskFrom(smtp.inboundEmail),
       to: input.toEmail,
+      replyTo: smtp.inboundEmail,
       subject: input.mentioned
         ? `Wspomniano Cię w komentarzu: ${input.taskTitle}`
         : `Nowy komentarz w zadaniu: ${input.taskTitle}`,
-      react: TaskCommentedEmail({
-        assigneeName: input.assigneeName,
-        actorName: input.actorName,
-        taskTitle: input.taskTitle,
-        boardTitle: input.boardTitle,
-        commentExcerpt: excerpt(input.comment),
-        taskUrl: taskUrl(input.boardId, input.taskId),
-        mentioned: input.mentioned,
-      }),
+      text,
+      html,
     });
-  });
+  } finally {
+    transporter.close();
+  }
 }
 
 export async function sendTicketReplyEmail(input: {
@@ -291,6 +267,38 @@ export async function sendTicketStatusChangedEmail(input: {
       to: input.toEmail,
       replyTo: input.inboundEmail,
       subject: `[${input.displayId}] Status: ${input.statusLabel}`,
+      text,
+      html,
+    });
+  } finally {
+    transporter.close();
+  }
+}
+
+export async function sendAccountActivationEmail(input: {
+  toEmail: string;
+  userName: string;
+  activationToken: string;
+  inboundEmail: string;
+  smtpHost: string;
+  smtpUser: string;
+  smtpPassword: string;
+}) {
+  const transporter = createSmtpTransport(input);
+  const activationUrl = accountActivationUrl(input.activationToken);
+  const { html, text } = await renderEmail(
+    AccountActivationEmail({
+      userName: input.userName,
+      activationUrl,
+    }),
+  );
+
+  try {
+    await transporter.sendMail({
+      from: helpdeskFrom(input.inboundEmail),
+      to: input.toEmail,
+      replyTo: input.inboundEmail,
+      subject: "Aktywuj konto HelpDesk i ustaw hasło",
       text,
       html,
     });

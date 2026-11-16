@@ -496,7 +496,7 @@ export async function addComment(
       continue;
     }
 
-    notifyTaskCommented({
+    void notifyTaskCommented({
       toEmail: member.email,
       assigneeName: member.name,
       actorName,

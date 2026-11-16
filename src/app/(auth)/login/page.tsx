@@ -19,10 +19,16 @@ const display = Space_Grotesk({
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string }>;
+  searchParams: Promise<{
+    callbackUrl?: string;
+    activated?: string;
+    email?: string;
+  }>;
 }) {
   const params = await searchParams;
   const license = getAppLicense();
+  const activated = params.activated === "1";
+  const activatedEmail = params.email?.trim().toLowerCase() ?? "";
 
   return (
     <main className={`${display.className} relative grid min-h-svh lg:grid-cols-[1.1fr_0.9fr]`}>
@@ -74,12 +80,21 @@ export default async function LoginPage({
               Zaloguj się
             </h2>
             <p className="max-w-sm text-sm leading-6 text-muted-foreground">
-              Wejdź kontem służbowym. Dostęp tylko dla użytkowników utworzonych przez
-              administratora.
+              Wejdź kontem służbowym. Konta zakłada administrator albo automatycznie
+              po pierwszym mailu na HelpDesk z domeny firmowej.
             </p>
+            {activated ? (
+              <p className="max-w-sm rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">
+                Konto aktywowane. Zaloguj się nowym hasłem
+                {activatedEmail ? ` (${activatedEmail})` : ""}.
+              </p>
+            ) : null}
           </div>
 
-          <LoginForm callbackUrl={safeCallbackUrl(params.callbackUrl ?? null)} />
+          <LoginForm
+            callbackUrl={safeCallbackUrl(params.callbackUrl ?? null)}
+            defaultEmail={activatedEmail}
+          />
 
           <aside className="mt-10 max-w-md border-t border-border pt-6">
             <p className="text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">

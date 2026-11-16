@@ -18,6 +18,8 @@ export async function proxy(request: NextRequest) {
   const isRestricted = Boolean(session?.user?.isRestricted);
   const isLogin =
     pathname === "/login" || pathname.startsWith("/login/");
+  const isActivate =
+    pathname === "/activate" || pathname.startsWith("/activate/");
   const isAuthApi = pathname.startsWith("/api/auth");
 
   if (isAuthApi) {
@@ -32,8 +34,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (isLogin) {
-    if (isLoggedIn) {
+  if (isLogin || isActivate) {
+    if (isLoggedIn && isLogin) {
       return NextResponse.redirect(
         new URL(homeForUser(isRestricted), request.url),
       );

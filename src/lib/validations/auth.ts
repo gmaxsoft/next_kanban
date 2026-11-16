@@ -71,6 +71,24 @@ export const changePasswordSchema = z
     path: ["newPassword"],
   });
 
+export const activateAccountSchema = z
+  .object({
+    token: z
+      .string()
+      .trim()
+      .min(32, "Nieprawidłowy link aktywacyjny")
+      .max(128, "Nieprawidłowy link aktywacyjny"),
+    password: z
+      .string()
+      .min(8, "Hasło musi mieć co najmniej 8 znaków")
+      .max(72, "Hasło może mieć maksymalnie 72 znaki"),
+    confirmPassword: z.string().min(1, "Potwierdź hasło"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Hasła nie są identyczne",
+    path: ["confirmPassword"],
+  });
+
 export const roleSchema = z.object({
   name: z
     .string()

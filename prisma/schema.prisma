@@ -85,6 +85,9 @@ model User {
   teamId        String?   @db.Char(36)
   isActive      Boolean   @default(true)
   avatarUrl     String?
+  /// SHA-256 hex of one-time activation token (auto-provision from inbound mail).
+  activationTokenHash       String?   @unique @db.Char(64)
+  activationTokenExpiresAt  DateTime?
   createdAt     DateTime  @default(now())
 
   role            AppRole         @relation(fields: [roleId], references: [id], onDelete: Restrict)

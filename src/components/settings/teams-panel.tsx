@@ -81,7 +81,7 @@ function InboundFields({
             setInboundType(event.target.value === "IMAP" ? "IMAP" : "WEBHOOK")
           }
         >
-          <option value="WEBHOOK">Webhook (Resend / JSON)</option>
+          <option value="WEBHOOK">Webhook (JSON)</option>
           <option value="IMAP">IMAP (poll cron)</option>
         </select>
       </div>
