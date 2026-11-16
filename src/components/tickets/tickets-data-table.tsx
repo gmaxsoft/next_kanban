@@ -154,9 +154,15 @@ export function TicketsDataTable({
             <DataTableColumnHeader column={column} title="ID" />
           ),
           cell: ({ row }) => (
-            <span className="font-mono text-xs font-semibold">
+            <Link
+              href={`/tickets/${row.original.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs font-semibold text-primary underline underline-offset-4 transition-colors hover:text-muted-foreground dark:hover:text-[#e0bf4a]"
+              aria-label={`Zobacz ticket ${row.original.displayId}`}
+            >
               {row.original.displayId}
-            </span>
+            </Link>
           ),
           filterFn: "includesString",
           meta: {
@@ -168,8 +174,16 @@ export function TicketsDataTable({
           header: ({ column }) => (
             <DataTableColumnHeader column={column} title="Temat" />
           ),
-          cell: ({ getValue }) => (
-            <span className="font-medium">{getValue()}</span>
+          cell: ({ row, getValue }) => (
+            <Link
+              href={`/tickets/${row.original.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-muted-foreground dark:hover:text-[#e0bf4a]"
+              aria-label={`Zobacz ticket ${row.original.displayId}: ${getValue()}`}
+            >
+              {getValue()}
+            </Link>
           ),
           filterFn: "includesString",
           meta: {
@@ -265,6 +279,7 @@ export function TicketsDataTable({
           enableColumnFilter: false,
           enableGlobalFilter: false,
         }),
+        // Kept for possible restore; hidden via initialState.columnVisibility.
         columnHelper.display({
           id: "actions",
           header: () => <span className="font-medium">Akcje</span>,
@@ -297,6 +312,11 @@ export function TicketsDataTable({
     columns,
     getRowId: (row) => row.id,
     enableRowSelection: true,
+    initialState: {
+      columnVisibility: {
+        actions: false,
+      },
+    },
     state: {
       sorting,
       columnFilters,

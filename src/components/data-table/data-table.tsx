@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { flexRender } from "@tanstack/react-table";
 import type { LegacyReactTable } from "@tanstack/react-table/legacy";
 import type { DragEndEvent, UniqueIdentifier } from "@dnd-kit/core";
@@ -13,6 +14,114 @@ import {
 } from "@/components/data-table/data-table-row-dnd";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+const HORIZONTAL_SCROLL_STEP = 96;
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest(
+      "input, textarea, select, [contenteditable=true], [role='combobox'], [role='listbox'], [role='menu'], [role='option']",
+    ),
+  );
+}
+
+function scrollHorizontally(
+  element: HTMLElement,
+  direction: "left" | "right",
+) {
+  const maxScroll = element.scrollWidth - element.clientWidth;
+  if (maxScroll <= 0) {
+    return false;
+  }
+
+  const delta =
+    direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP;
+  const next = Math.max(0, Math.min(maxScroll, element.scrollLeft + delta));
+  if (next === element.scrollLeft) {
+    return false;
+  }
+
+  element.scrollTo({ left: next, behavior: "smooth" });
+  return true;
+}
+
+/** Horizontal overflow area: arrow keys scroll when hovered or focused. */
+function DataTableScrollArea({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const hoveredRef = useRef(false);
+
+  useEffect(() => {
+    function onWindowKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+        return;
+      }
+      if (!hoveredRef.current || isEditableTarget(event.target)) {
+        return;
+      }
+
+      const element = ref.current;
+      if (!element) {
+        return;
+      }
+
+      const scrolled = scrollHorizontally(
+        element,
+        event.key === "ArrowLeft" ? "left" : "right",
+      );
+      if (scrolled) {
+        event.preventDefault();
+      }
+    }
+
+    window.addEventListener("keydown", onWindowKeyDown);
+    return () => window.removeEventListener("keydown", onWindowKeyDown);
+  }, []);
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+    if (isEditableTarget(event.target)) {
+      return;
+    }
+
+    const element = ref.current;
+    if (!element) {
+      return;
+    }
+
+    const scrolled = scrollHorizontally(
+      element,
+      event.key === "ArrowLeft" ? "left" : "right",
+    );
+    if (scrolled) {
+      event.preventDefault();
+    }
+  }
+
+  return (
+    <div
+      ref={ref}
+      tabIndex={0}
+      role="region"
+      aria-label="Tabela — strzałki w lewo i w prawo przewijają poziomo"
+      className="overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      onMouseEnter={() => {
+        hoveredRef.current = true;
+      }}
+      onMouseLeave={() => {
+        hoveredRef.current = false;
+      }}
+      onKeyDown={onKeyDown}
+    >
+      {children}
+    </div>
+  );
+}
 
 export type ColumnFilterMeta = {
   filterVariant?: "text" | "select";
@@ -73,7 +182,7 @@ export function DataTable<TData extends Record<string, unknown>>({
   );
 
   const tableNode = (
-    <div className="overflow-x-auto">
+    <DataTableScrollArea>
       <table className="w-full min-w-[48rem] text-left text-sm">
         <thead className="border-b text-muted-foreground">
           {table.getHeaderGroups().map((headerGroup) => (
@@ -118,7 +227,7 @@ export function DataTable<TData extends Record<string, unknown>>({
         </thead>
         {body}
       </table>
-    </div>
+    </DataTableScrollArea>
   );
 
   return (
