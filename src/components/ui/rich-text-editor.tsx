@@ -38,6 +38,43 @@ import {
 } from "@/lib/rich-text";
 import { getInitials } from "@/lib/user";
 
+const HEIGHT_STORAGE_PREFIX = "helpdesk:rich-text-height:";
+const MIN_PERSISTED_HEIGHT_PX = 96;
+const MAX_PERSISTED_HEIGHT_PX = 768;
+
+function readStoredEditorHeight(storageKey: string): number | null {
+  try {
+    const raw = window.localStorage.getItem(
+      `${HEIGHT_STORAGE_PREFIX}${storageKey}`,
+    );
+    if (!raw) {
+      return null;
+    }
+    const value = Number.parseInt(raw, 10);
+    if (
+      !Number.isFinite(value) ||
+      value < MIN_PERSISTED_HEIGHT_PX ||
+      value > MAX_PERSISTED_HEIGHT_PX
+    ) {
+      return null;
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredEditorHeight(storageKey: string, heightPx: number) {
+  try {
+    window.localStorage.setItem(
+      `${HEIGHT_STORAGE_PREFIX}${storageKey}`,
+      String(Math.round(heightPx)),
+    );
+  } catch {
+    // Ignore quota / private mode.
+  }
+}
+
 function toEditorContent(value?: string) {
   if (!value?.trim()) {
     return "";
@@ -109,6 +146,7 @@ export function RichTextEditor({
   enableImages = false,
   resetKey,
   members = [],
+  heightStorageKey,
 }: {
   name: string;
   id?: string;
@@ -119,11 +157,14 @@ export function RichTextEditor({
   enableImages?: boolean;
   resetKey?: string | number | boolean | null;
   members?: EditorMentionMember[];
+  /** localStorage key for resized height (defaults to `name`). */
+  heightStorageKey?: string;
 }) {
   const sanitizeOptions: SanitizeRichTextOptions = {
     allowImages: enableImages,
   };
   const mentionsEnabled = members.length > 0;
+  const persistKey = heightStorageKey ?? name;
   const [html, setHtml] = useState(() =>
     normalizeRichTextInput(toEditorContent(defaultValue), sanitizeOptions),
   );
@@ -137,12 +178,47 @@ export function RichTextEditor({
   const [mentionPlacement, setMentionPlacement] = useState<"below" | "above">(
     "below",
   );
+  const [surfaceHeightPx, setSurfaceHeightPx] = useState<number | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
   const activeMentionRef = useRef<ActiveMentionQuery | null>(null);
   const suggestionsRef = useRef<EditorMentionMember[]>([]);
   const activeIndexRef = useRef(0);
+
+  useEffect(() => {
+    setSurfaceHeightPx(readStoredEditorHeight(persistKey));
+  }, [persistKey]);
+
+  useEffect(() => {
+    const element = surfaceRef.current;
+    if (!element) {
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new ResizeObserver(() => {
+      const next = Math.round(element.getBoundingClientRect().height);
+      if (
+        next < MIN_PERSISTED_HEIGHT_PX ||
+        next > MAX_PERSISTED_HEIGHT_PX
+      ) {
+        return;
+      }
+      window.clearTimeout(timer);
+      timer = setTimeout(() => {
+        setSurfaceHeightPx(next);
+        writeStoredEditorHeight(persistKey, next);
+      }, 120);
+    });
+
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [persistKey]);
 
   const suggestions = useMemo(() => {
     if (!activeMention) {
@@ -421,10 +497,10 @@ export function RichTextEditor({
         />
       ))}
 
-      <div className="overflow-hidden rounded-lg border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
+      <div className="rounded-lg border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
         <input type="hidden" name={name} value={html} readOnly />
 
-        <div className="flex flex-wrap gap-0.5 border-b border-border bg-muted/40 p-1">
+        <div className="flex flex-wrap gap-0.5 rounded-t-[inherit] border-b border-border bg-muted/40 p-1">
           <ToolbarButton
             label="Pogrubienie"
             active={editor?.isActive("bold")}
@@ -567,7 +643,22 @@ export function RichTextEditor({
           </ToolbarButton>
         </div>
 
-        <EditorContent editor={editor} />
+        <div
+          ref={surfaceRef}
+          className={cn(
+            "resize-y overflow-auto",
+            minHeightClassName,
+            "max-h-[min(70vh,48rem)]",
+          )}
+          style={
+            surfaceHeightPx
+              ? { height: `${surfaceHeightPx}px` }
+              : undefined
+          }
+          onClick={() => editor?.chain().focus().run()}
+        >
+          <EditorContent editor={editor} />
+        </div>
         {enableImages && uploading ? (
           <p className="border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
             Wgrywanie zdjęcia…

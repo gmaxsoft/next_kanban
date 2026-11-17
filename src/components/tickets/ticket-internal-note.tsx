@@ -95,6 +95,7 @@ export function TicketInternalNote({
       <input type="hidden" name="messageId" value={messageId} />
       <RichTextEditor
         name="body"
+        heightStorageKey="ticket-internal-note-edit"
         enableImages
         members={members}
         defaultValue={displayValue}

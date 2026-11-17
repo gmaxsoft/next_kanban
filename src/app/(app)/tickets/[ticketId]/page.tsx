@@ -262,6 +262,15 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
         />
       ) : null}
 
+      <TicketReplyForm
+        ticketId={ticket.id}
+        members={members
+          .filter(
+            (member) => !ticket.teamId || member.teamId === ticket.teamId,
+          )
+          .map(({ id, name }) => ({ id, name }))}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Załączniki</CardTitle>
@@ -317,15 +326,6 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
           />
         </CardContent>
       </Card>
-
-      <TicketReplyForm
-        ticketId={ticket.id}
-        members={members
-          .filter(
-            (member) => !ticket.teamId || member.teamId === ticket.teamId,
-          )
-          .map(({ id, name }) => ({ id, name }))}
-      />
     </div>
   );
 }

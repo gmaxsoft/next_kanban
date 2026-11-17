@@ -63,6 +63,7 @@ export function TicketReplyForm({
             key={replyEditorKey}
             id="reply-body"
             name="body"
+            heightStorageKey="ticket-reply"
             members={members}
             placeholder="Dziękujemy za zgłoszenie..."
             minHeightClassName="min-h-40"
@@ -88,6 +89,7 @@ export function TicketReplyForm({
             key={noteEditorKey}
             id="note-body"
             name="body"
+            heightStorageKey="ticket-internal-note"
             enableImages
             members={members}
             placeholder="Notatka dla zespołu… wklej zdjęcie lub napisz @Imię"
