@@ -19,11 +19,13 @@ async function main() {
     },
     { verifyChatToken },
     { chatMessageSchema, directMessageSchema, groupMessageSchema },
+    { isChatTeamSwitchAllowed },
   ] = await Promise.all([
     import("../src/lib/prisma"),
     import("../src/lib/chat"),
     import("../src/lib/chat-token"),
     import("../src/lib/validations/chat"),
+    import("../src/lib/app-settings"),
   ]);
 
   const port = Number(process.env.SOCKET_PORT ?? 3001);
@@ -159,8 +161,29 @@ async function main() {
         return;
       }
 
+      const [allowSwitch, dbUser] = await Promise.all([
+        isChatTeamSwitchAllowed(),
+        prisma.user.findUnique({
+          where: { id: user.id },
+          select: { teamId: true },
+        }),
+      ]);
+
+      const allowedIds = allowSwitch
+        ? teamIds
+        : dbUser?.teamId
+          ? teamIds.filter((id) => id === dbUser.teamId)
+          : [];
+
+      if (allowedIds.length === 0) {
+        socket.emit(CHAT_EVENTS.error, {
+          error: "Brak dostępu do wybranego zespołu.",
+        });
+        return;
+      }
+
       const teams = await prisma.team.findMany({
-        where: { id: { in: teamIds } },
+        where: { id: { in: allowedIds } },
         select: { id: true },
       });
 

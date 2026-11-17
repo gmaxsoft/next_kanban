@@ -63,6 +63,7 @@ export function ChatRoom({
   currentUserId,
   teamId,
   teams,
+  allowTeamSwitch = false,
   members,
   initialMessages,
   mode = "team",
@@ -78,6 +79,7 @@ export function ChatRoom({
   currentUserId: string;
   teamId: string;
   teams: ChatTeamOption[];
+  allowTeamSwitch?: boolean;
   members: ChatMember[];
   initialMessages: ThreadMessage[];
   mode?: "team" | "dm" | "group";
@@ -498,22 +500,24 @@ export function ChatRoom({
                     Kanał zespołu — po prawej: klik = DM, Ctrl+A = grupa.
                   </p>
                 </div>
-                <label className="grid gap-1 text-xs text-muted-foreground">
-                  Aktywny zespół
-                  <select
-                    className={selectClassName}
-                    value={teamId}
-                    onChange={(event) => {
-                      router.replace(`/chat?team=${event.target.value}`);
-                    }}
-                  >
-                    {teams.map((team) => (
-                      <option key={team.id} value={team.id}>
-                        {team.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {allowTeamSwitch && teams.length > 1 ? (
+                  <label className="grid gap-1 text-xs text-muted-foreground">
+                    Aktywny zespół
+                    <select
+                      className={selectClassName}
+                      value={teamId}
+                      onChange={(event) => {
+                        router.replace(`/chat?team=${event.target.value}`);
+                      }}
+                    >
+                      {teams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
             )}
           </div>

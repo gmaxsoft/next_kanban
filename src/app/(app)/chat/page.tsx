@@ -12,6 +12,7 @@ import {
   listRecentDirectPeers,
   listRecentGroupConversations,
   listRecentGroupMessages,
+  isChatTeamSwitchEnabledForUi,
   listTeamsForChat,
 } from "@/lib/chat-data";
 import {
@@ -41,14 +42,18 @@ function firstParam(value?: string | string[]) {
 
 export default async function ChatPage({ searchParams }: ChatPageProps) {
   const session = await requireAuth();
-  const teams = await listTeamsForChat();
+  const [teams, allowTeamSwitch] = await Promise.all([
+    listTeamsForChat({ teamId: session.user.teamId }),
+    isChatTeamSwitchEnabledForUi(),
+  ]);
 
   if (teams.length === 0) {
     return (
       <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
         <h2 className="text-2xl font-semibold">Czat</h2>
         <p className="text-sm text-muted-foreground">
-          Brak zespołów — utwórz zespół w Ustawieniach.
+          Brak zespołów — utwórz zespół w Ustawieniach albo przypisz użytkownika
+          do zespołu.
         </p>
       </div>
     );
@@ -63,7 +68,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
     teams.find((team) => team.id === requestedTeam)?.id ??
     teams.find((team) => team.id === session.user.teamId)?.id ??
     teams.find((team) => team.id === DEFAULT_TEAM_ID)?.id ??
-    teams[0].id;
+    teams[0]!.id;
 
   if (requestedGroup) {
     const group = await getGroupConversationForUser(
@@ -107,6 +112,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
           currentUserId={session.user.id}
           teamId={preferredTeam}
           teams={teams}
+          allowTeamSwitch={allowTeamSwitch}
           members={members}
           initialMessages={messages}
           conversationId={group.conversationId}
@@ -168,6 +174,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
           currentUserId={session.user.id}
           teamId={preferredTeam}
           teams={teams}
+          allowTeamSwitch={allowTeamSwitch}
           members={members}
           initialMessages={messages}
           peer={dm.peer}
@@ -212,6 +219,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
         currentUserId={session.user.id}
         teamId={preferredTeam}
         teams={teams}
+        allowTeamSwitch={allowTeamSwitch}
         members={members}
         initialMessages={messages}
         recentPeers={recentPeers}

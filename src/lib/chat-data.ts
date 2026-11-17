@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
+import { isChatTeamSwitchAllowed } from "@/lib/app-settings";
 import { prisma } from "@/lib/prisma";
+import { BIURO_TEAM_ID } from "@/lib/rbac";
 import {
   CHAT_HISTORY_LIMIT,
   GROUP_CHAT_MAX_OTHERS,
@@ -25,11 +27,45 @@ function groupMemberKey(memberIds: string[]) {
   return createHash("sha256").update(raw).digest("hex");
 }
 
-export async function listTeamsForChat(): Promise<ChatTeamOption[]> {
-  return prisma.team.findMany({
+/**
+ * Teams visible in chat for this user.
+ * When team-switch is off (default), only the user's own team.
+ */
+export async function listTeamsForChat(user?: {
+  teamId: string | null;
+}): Promise<ChatTeamOption[]> {
+  const allowSwitch = await isChatTeamSwitchAllowed();
+
+  if (allowSwitch || !user) {
+    return prisma.team.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  const scopedId = user.teamId ?? BIURO_TEAM_ID;
+  const team = await prisma.team.findUnique({
+    where: { id: scopedId },
     select: { id: true, name: true },
-    orderBy: { name: "asc" },
   });
+
+  if (team) {
+    return [team];
+  }
+
+  if (user.teamId && user.teamId !== BIURO_TEAM_ID) {
+    const fallback = await prisma.team.findUnique({
+      where: { id: BIURO_TEAM_ID },
+      select: { id: true, name: true },
+    });
+    return fallback ? [fallback] : [];
+  }
+
+  return [];
+}
+
+export async function isChatTeamSwitchEnabledForUi() {
+  return isChatTeamSwitchAllowed();
 }
 
 export async function listRecentChatMessages(

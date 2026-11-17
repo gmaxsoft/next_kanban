@@ -50,6 +50,13 @@ model AppRole {
   @@map("Role")
 }
 
+/// Key/value app flags (e.g. chat.allowTeamSwitch). Missing key = default.
+model AppSetting {
+  key       String   @id @db.VarChar(64)
+  value     String   @db.VarChar(255)
+  updatedAt DateTime @updatedAt
+}
+
 model Team {
   id                       String      @id @default(uuid()) @db.Char(36)
   name                     String      @unique

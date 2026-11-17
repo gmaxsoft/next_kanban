@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
-import { SYSTEM_RESTRICTED_ROLE_ID } from "@/lib/rbac";
+import { BIURO_TEAM_ID, SYSTEM_RESTRICTED_ROLE_ID } from "@/lib/rbac";
 import { sendAccountActivationEmail } from "@/lib/mail";
 
 /**
@@ -112,10 +112,11 @@ export async function maybeAutoProvisionUserFromInbound(input: {
     return { provisioned: false as const, reason: "missing-role" as const };
   }
 
-  let teamId = input.teamId;
-  const team = teamId
+  // Membership is always Biuro; SMTP for activation still uses the mailbox team.
+  const mailboxTeamId = input.teamId;
+  const mailboxTeam = mailboxTeamId
     ? await prisma.team.findUnique({
-        where: { id: teamId },
+        where: { id: mailboxTeamId },
         select: {
           id: true,
           inboundEmail: true,
@@ -126,8 +127,15 @@ export async function maybeAutoProvisionUserFromInbound(input: {
       })
     : null;
 
-  if (!team) {
-    teamId = null;
+  const biuroTeam = await prisma.team.findUnique({
+    where: { id: BIURO_TEAM_ID },
+    select: { id: true },
+  });
+  const userTeamId = biuroTeam?.id ?? null;
+  if (!biuroTeam) {
+    console.warn(
+      "[auto-provision] brak zespołu Biuro — konto bez teamId",
+    );
   }
 
   const user = existing
@@ -136,7 +144,7 @@ export async function maybeAutoProvisionUserFromInbound(input: {
         data: {
           name,
           roleId: restrictedRole.id,
-          teamId: teamId ?? existing.teamId,
+          teamId: userTeamId,
           isActive: false,
           passwordHash: placeholderPassword,
           activationTokenHash: activation.tokenHash,
@@ -149,7 +157,7 @@ export async function maybeAutoProvisionUserFromInbound(input: {
           name,
           email,
           roleId: restrictedRole.id,
-          teamId,
+          teamId: userTeamId,
           isActive: false,
           passwordHash: placeholderPassword,
           activationTokenHash: activation.tokenHash,
@@ -159,22 +167,28 @@ export async function maybeAutoProvisionUserFromInbound(input: {
       });
 
   const canSendSmtp =
-    Boolean(team?.inboundEmail) &&
-    Boolean(team?.imapHost?.startsWith("imap.")) &&
-    Boolean(team?.imapUser) &&
-    Boolean(team?.imapPassword);
+    Boolean(mailboxTeam?.inboundEmail) &&
+    Boolean(mailboxTeam?.imapHost?.startsWith("imap.")) &&
+    Boolean(mailboxTeam?.imapUser) &&
+    Boolean(mailboxTeam?.imapPassword);
 
   let emailSent = false;
-  if (canSendSmtp && team?.inboundEmail && team.imapHost && team.imapUser && team.imapPassword) {
+  if (
+    canSendSmtp &&
+    mailboxTeam?.inboundEmail &&
+    mailboxTeam.imapHost &&
+    mailboxTeam.imapUser &&
+    mailboxTeam.imapPassword
+  ) {
     try {
       await sendAccountActivationEmail({
         toEmail: user.email,
         userName: user.name,
         activationToken: activation.token,
-        inboundEmail: team.inboundEmail,
-        smtpHost: team.imapHost.replace(/^imap\./i, "smtp."),
-        smtpUser: team.imapUser,
-        smtpPassword: team.imapPassword,
+        inboundEmail: mailboxTeam.inboundEmail,
+        smtpHost: mailboxTeam.imapHost.replace(/^imap\./i, "smtp."),
+        smtpUser: mailboxTeam.imapUser,
+        smtpPassword: mailboxTeam.imapPassword,
       });
       emailSent = true;
     } catch (error) {

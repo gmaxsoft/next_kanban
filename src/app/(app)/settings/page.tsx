@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ChatSettingsPanel } from "@/components/settings/chat-settings-panel";
 import { RolesPanel } from "@/components/settings/roles-panel";
 import { TeamsPanel } from "@/components/settings/teams-panel";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isChatTeamSwitchAllowed } from "@/lib/app-settings";
 import { requireAdmin } from "@/lib/auth-utils";
 import { prisma } from "@/lib/prisma";
 
@@ -20,10 +22,10 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsPage() {
-  const session = await requireAdmin();
+  await requireAdmin();
   const canManage = true;
 
-  const [roles, teams] = await Promise.all([
+  const [roles, teams, allowChatTeamSwitch] = await Promise.all([
     prisma.appRole.findMany({
       orderBy: [{ isAdmin: "desc" }, { name: "asc" }],
       include: { _count: { select: { users: true } } },
@@ -32,6 +34,7 @@ export default async function SettingsPage() {
       orderBy: { name: "asc" },
       include: { _count: { select: { users: true } } },
     }),
+    isChatTeamSwitchAllowed(),
   ]);
 
   return (
@@ -39,7 +42,7 @@ export default async function SettingsPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Ustawienia</h2>
         <p className="text-sm text-muted-foreground">
-          Zespoły, role oraz skrót do profilu konta.
+          Zespoły, role, czat oraz skrót do profilu konta.
         </p>
       </div>
 
@@ -47,6 +50,7 @@ export default async function SettingsPage() {
         <TabsList variant="line">
           <TabsTrigger value="teams">Zespoły</TabsTrigger>
           <TabsTrigger value="roles">Role</TabsTrigger>
+          <TabsTrigger value="chat">Czat</TabsTrigger>
         </TabsList>
 
         <TabsContent value="teams" className="mt-4">
@@ -101,6 +105,23 @@ export default async function SettingsPage() {
                   isRestricted: role.isRestricted,
                   userCount: role._count.users,
                 }))}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="chat" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Czat</CardTitle>
+              <CardDescription>
+                Zakres widoczności kanałów zespołowych.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ChatSettingsPanel
+                canManage={canManage}
+                allowTeamSwitch={allowChatTeamSwitch}
               />
             </CardContent>
           </Card>

@@ -30,7 +30,7 @@ export default async function AppLayout({
     await Promise.all([
       listNotifications(session.user.id),
       countUnreadNotifications(session.user.id),
-      listTeamsForChat(),
+      listTeamsForChat({ teamId: session.user.teamId }),
       countUnreadChatMessages(session.user.id),
     ]);
 

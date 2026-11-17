@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { z } from "zod";
 
 import { requireAdmin } from "@/lib/auth-utils";
+import { setChatTeamSwitchAllowed } from "@/lib/app-settings";
 import { prisma } from "@/lib/prisma";
 import {
   roleFlagsFromPermission,
@@ -348,4 +349,20 @@ export async function deleteTeam(
   await prisma.team.delete({ where: { id: team.id } });
   revalidateSettings();
   return { success: "Usunięto zespół." };
+}
+
+export async function updateChatSettings(
+  _prev: SettingsActionState,
+  formData: FormData,
+): Promise<SettingsActionState> {
+  await requireAdmin();
+
+  const allowTeamSwitch = formData.get("allowTeamSwitch") === "1";
+  await setChatTeamSwitchAllowed(allowTeamSwitch);
+  revalidateSettings();
+  return {
+    success: allowTeamSwitch
+      ? "Włączono zmianę zespołu w czacie."
+      : "Wyłączono zmianę zespołu w czacie — każdy widzi tylko swój zespół.",
+  };
 }
