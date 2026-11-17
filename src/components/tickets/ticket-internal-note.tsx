@@ -48,18 +48,20 @@ export function TicketInternalNote({
 
   if (!editing) {
     return (
-      <div>
-        {displayValue ? (
-          <RichTextContent
-            value={displayValue}
-            allowImages
-            className="leading-6"
-          />
-        ) : (
-          <p className="text-sm leading-6 text-muted-foreground">
-            (brak treści)
-          </p>
-        )}
+      <div className="min-w-0 overflow-visible">
+        <div className="min-w-0 max-w-full overflow-x-auto">
+          {displayValue ? (
+            <RichTextContent
+              value={displayValue}
+              allowImages
+              className="leading-6"
+            />
+          ) : (
+            <p className="text-sm leading-6 text-muted-foreground">
+              (brak treści)
+            </p>
+          )}
+        </div>
         {canEdit ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
@@ -89,7 +91,7 @@ export function TicketInternalNote({
   }
 
   return (
-    <form action={formAction} className="grid gap-2">
+    <form action={formAction} className="grid gap-2 overflow-visible">
       <input type="hidden" name="messageId" value={messageId} />
       <RichTextEditor
         name="body"
@@ -98,6 +100,7 @@ export function TicketInternalNote({
         defaultValue={displayValue}
         placeholder="Notatka dla zespołu… wklej zdjęcie lub napisz @Imię"
         minHeightClassName="min-h-32"
+        className="z-20"
       />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="sm" disabled={pending} className="w-fit">
