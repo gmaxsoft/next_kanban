@@ -1,15 +1,30 @@
+import { listTeamsForChat } from "@/lib/chat-data";
 import { prisma } from "@/lib/prisma";
 
 /** First login / new teams: baseline so only future messages count as unread. */
-export async function ensureChatTeamReads(userId: string) {
-  const teams = await prisma.team.findMany({ select: { id: true } });
+export async function ensureChatTeamReads(
+  userId: string,
+  teamIds?: string[],
+) {
+  const teams =
+    teamIds && teamIds.length > 0
+      ? teamIds.map((id) => ({ id }))
+      : await listTeamsForChat(
+          await prisma.user.findUnique({
+            where: { id: userId },
+            select: { teamId: true },
+          }).then((user) => ({ teamId: user?.teamId ?? null })),
+        );
 
   if (teams.length === 0) {
     return;
   }
 
   const existing = await prisma.chatTeamRead.findMany({
-    where: { userId },
+    where: {
+      userId,
+      teamId: { in: teams.map((team) => team.id) },
+    },
     select: { teamId: true },
   });
   const known = new Set(existing.map((row) => row.teamId));
@@ -94,10 +109,26 @@ export async function ensureGroupConversationReads(userId: string) {
 }
 
 async function countUnreadTeamMessages(userId: string) {
-  await ensureChatTeamReads(userId);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { teamId: true },
+  });
+  const visibleTeams = await listTeamsForChat({
+    teamId: user?.teamId ?? null,
+  });
+  const visibleTeamIds = visibleTeams.map((team) => team.id);
+
+  if (visibleTeamIds.length === 0) {
+    return 0;
+  }
+
+  await ensureChatTeamReads(userId, visibleTeamIds);
 
   const reads = await prisma.chatTeamRead.findMany({
-    where: { userId },
+    where: {
+      userId,
+      teamId: { in: visibleTeamIds },
+    },
     select: { teamId: true, lastReadAt: true },
   });
 
