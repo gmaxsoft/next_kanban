@@ -7,12 +7,30 @@ import {
   stripTicketRef,
 } from "@/lib/tickets";
 import { sendTicketAcknowledgementEmail, ticketUrl } from "@/lib/mail";
+import { findFirstMentionedUserId } from "@/lib/mentions";
 import { notifyTicketParticipants } from "@/lib/ticket-notifications";
 import { prisma } from "@/lib/prisma";
 import {
   storeTicketAttachments,
   type IncomingTicketAttachment,
 } from "@/lib/ticket-attachments.server";
+
+async function resolveInboundAssigneeId(
+  teamId: string | null,
+  bodyText: string,
+) {
+  if (!teamId) {
+    return null;
+  }
+
+  const members = await prisma.user.findMany({
+    where: { isActive: true, teamId },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+
+  return findFirstMentionedUserId(bodyText, members);
+}
 
 async function tryAutoProvisionSender(
   email: IncomingEmailInput,
@@ -375,6 +393,7 @@ export async function processIncomingEmail(
   }
 
   const subject = stripTicketRef(email.subject) || email.subject;
+  const assigneeId = await resolveInboundAssigneeId(teamId, bodyText);
 
   const created = await prisma.ticket.create({
     data: {
@@ -383,6 +402,7 @@ export async function processIncomingEmail(
       requesterName: email.fromName,
       requestedBy: email.fromName || email.fromEmail,
       teamId,
+      assigneeId,
       lastMessageAt: new Date(),
       messages: {
         create: {
@@ -409,8 +429,17 @@ export async function processIncomingEmail(
   }
 
   console.info(
-    `[inbound-email] nowy ticket ${formatTicketId(created.number)} od ${email.fromEmail}`,
+    `[inbound-email] nowy ticket ${formatTicketId(created.number)} od ${email.fromEmail}` +
+      (assigneeId ? ` → assignee ${assigneeId}` : ""),
   );
+
+  if (assigneeId) {
+    await notifyTicketParticipants({
+      ticketId: created.id,
+      title: `Nowe zgłoszenie ${formatTicketId(created.number)}`,
+      body: `Przypisano Ci zgłoszenie „${subject.slice(0, 120)}” (wzmianka w mailu).`,
+    });
+  }
 
   const acknowledgementSent = await sendPendingTicketAcknowledgement(created.id);
   await tryAutoProvisionSender(email, teamId);

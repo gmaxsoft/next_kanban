@@ -14,8 +14,19 @@ function mentionAliases(
   const aliases = [member.name.trim()];
   const parts = member.name.trim().split(/\s+/).filter(Boolean);
 
+  if (parts.length >= 1) {
+    const first = parts[0]!;
+    const firstMatches = members.filter((candidate) => {
+      const candidateParts = candidate.name.trim().split(/\s+/).filter(Boolean);
+      return candidateParts[0]?.toLowerCase() === first.toLowerCase();
+    });
+    if (firstMatches.length === 1 && first.toLowerCase() !== aliases[0]!.toLowerCase()) {
+      aliases.push(first);
+    }
+  }
+
   if (parts.length > 1) {
-    const last = parts[parts.length - 1];
+    const last = parts[parts.length - 1]!;
     const lastMatches = members.filter((candidate) => {
       const candidateParts = candidate.name.trim().split(/\s+/).filter(Boolean);
       return (
@@ -30,6 +41,47 @@ function mentionAliases(
   }
 
   return aliases;
+}
+
+/**
+ * Earliest @mention in content order (full name, unique first, or unique last).
+ * Used e.g. to auto-assign new inbound tickets.
+ */
+export function findFirstMentionedUserId(
+  content: string,
+  members: MentionMember[],
+): string | null {
+  if (!content.trim() || members.length === 0) {
+    return null;
+  }
+
+  const candidates = members
+    .flatMap((member) =>
+      mentionAliases(member, members).map((alias) => ({
+        id: member.id,
+        alias,
+      })),
+    )
+    .sort((a, b) => b.alias.length - a.alias.length);
+
+  let best: { id: string; index: number } | null = null;
+
+  for (const candidate of candidates) {
+    const pattern = new RegExp(
+      `(^|[\\s([{\"'])@${escapeRegExp(candidate.alias)}(?=$|[\\s)\\]},.!?;:])`,
+      "giu",
+    );
+    const match = pattern.exec(content);
+    if (!match) {
+      continue;
+    }
+    const atIndex = match.index + (match[1] ? match[1].length : 0);
+    if (!best || atIndex < best.index) {
+      best = { id: candidate.id, index: atIndex };
+    }
+  }
+
+  return best?.id ?? null;
 }
 
 export function extractMentionedUserIds(

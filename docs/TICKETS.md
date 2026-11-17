@@ -102,7 +102,8 @@ Następnie wywołują `processIncomingEmail(...)`, która:
 
 - tworzy nowy ticket albo dopina wiadomość do wątku `[T-n]`,
 - pomija duplikaty po `Message-ID`,
-- opcjonalnie ustawia `preferredTeamId` (IMAP zawsze przypina zespół właściciela skrzynki).
+- opcjonalnie ustawia `preferredTeamId` (IMAP zawsze przypina zespół właściciela skrzynki),
+- przy **nowym** tickecie: jeśli w treści maila jest `@Imię` / `@Imię Nazwisko` pasujące do aktywnego członka zespołu skrzynki, ustawia **Odpowiedzialnego** (pierwsza wzmianka w treści; imię działa tylko gdy w zespole jest jednoznaczne).
 
 ---
 
@@ -205,9 +206,9 @@ Statusy: `Otwarte` · `W trakcie` · `Do weryfikacji` · `Rozwiązane` · `Zamkn
 
 Gdy nadawca z domeny **`pwg.info.pl`** lub **`pwginfo.pl`** (ochrona przed spamem) napisze na skrzynkę zespołu i nie ma jeszcze konta, system:
 
-1. tworzy użytkownika z rolą **Ograniczone (RESTRICTED)** (Tickety jako Zgłaszający / wzmianki + Czat), przypisanego do zespołu skrzynki,
+1. tworzy użytkownika z rolą **Ograniczone (RESTRICTED)** (Tickety jako Zgłaszający / wzmianki + Czat), zawsze przypisanego do zespołu **Biuro** (niezależnie od skrzynki IT/Biuro),
 2. konto jest nieaktywne do czasu ustawienia hasła,
-3. wysyła e-mail aktywacyjny **SMTP zespołu** (host z IMAP → `smtp.…`, jak potwierdzenia ticketów) z linkiem `/activate?token=…` (ważność 7 dni).
+3. wysyła e-mail aktywacyjny **SMTP zespołu skrzynki** (host z IMAP → `smtp.…`) z linkiem `/activate?token=…` (ważność 7 dni).
 
 Wymaga skonfigurowanego IMAP zespołu (host `imap.*`, user, hasło, `inboundEmail`).
 
