@@ -39,6 +39,24 @@ describe("findFirstMentionedUserId", () => {
   it("returns null without mentions", () => {
     expect(findFirstMentionedUserId("Zwykły mail bez osób.", team)).toBeNull();
   });
+
+  it("matches mention after HTML stripping noise", () => {
+    const stripped =
+      "Proszę  @Łukasz  o sprawdzenie drukarki.";
+    expect(findFirstMentionedUserId(stripped, team)).toBe(lukasz.id);
+  });
+
+  it("ignores emails that look similar but are not mentions", () => {
+    expect(
+      findFirstMentionedUserId("Kontakt: lukasz@firma.pl", team),
+    ).toBeNull();
+  });
+
+  it("requires word boundary before @", () => {
+    expect(
+      findFirstMentionedUserId("nie@Łukasz", team),
+    ).toBeNull();
+  });
 });
 
 describe("extractMentionedUserIds first-name alias", () => {
