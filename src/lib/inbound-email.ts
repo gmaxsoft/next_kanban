@@ -423,7 +423,7 @@ export async function processIncomingEmail(
     },
   });
 
-  const createdMessage = created.messages[0];
+  const createdMessage = created.messages?.[0];
   if (createdMessage) {
     await storeTicketAttachments(createdMessage.id, email.attachments);
   }

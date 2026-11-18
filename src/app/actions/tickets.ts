@@ -30,6 +30,10 @@ import {
   ticketStatusLabel,
 } from "@/lib/ticket-labels";
 import {
+  buildPeopleChangeHistoryNote,
+  missingTeamMemberIds,
+} from "@/lib/ticket-assignment";
+import {
   canUserAccessTicket,
   findTodoColumn,
   formatTicketId,
@@ -324,9 +328,11 @@ export async function updateTicketAssignee(
     select: {
       id: true,
       teamId: true,
+      assigneeId: true,
       requesterEmail: true,
       requesterName: true,
       requestedBy: true,
+      assignee: { select: { id: true, name: true } },
     },
   });
   if (!ticket) {
@@ -354,8 +360,15 @@ export async function updateTicketAssignee(
         select: { id: true, name: true, email: true },
       })
     : [];
-  if (people.length !== requestedIds.length) {
-    return { error: "Wybierz aktywne osoby z zespołu ticketu." };
+  const missingIds = missingTeamMemberIds(
+    requestedIds,
+    people.map((person) => person.id),
+  );
+  if (missingIds.length > 0) {
+    return {
+      error:
+        "Wybierz aktywne osoby z zespołu ticketu (odpowiedzialny / zgłaszający / obserwujący).",
+    };
   }
 
   const requesterUser = requesterUserId
@@ -393,6 +406,28 @@ export async function updateTicketAssignee(
     }
   }
 
+  const assigneeName = assigneeId
+    ? people.find((person) => person.id === assigneeId)?.name ?? null
+    : null;
+
+  const historyNote = buildPeopleChangeHistoryNote({
+    previous: {
+      assigneeId: ticket.assigneeId,
+      assigneeName: ticket.assignee?.name ?? null,
+      requestedBy: ticket.requestedBy,
+      requesterEmail: ticket.requesterEmail,
+      requesterName: ticket.requesterName,
+    },
+    next: {
+      assigneeId,
+      assigneeName,
+      requestedBy: requestedBy || null,
+      requesterEmail,
+      requesterName,
+    },
+    actorName: session.user.name ?? "Użytkownik",
+  });
+
   await prisma.$transaction(async (tx) => {
     await tx.ticket.update({
       where: { id: ticketId },
@@ -401,6 +436,9 @@ export async function updateTicketAssignee(
         requestedBy: requestedBy || null,
         requesterEmail,
         requesterName,
+        ...(historyNote
+          ? { lastMessageAt: new Date() }
+          : {}),
       },
     });
     await tx.ticketWatcher.deleteMany({ where: { ticketId } });
@@ -409,11 +447,18 @@ export async function updateTicketAssignee(
         data: watcherIds.map((userId) => ({ ticketId, userId })),
       });
     }
+    if (historyNote) {
+      await tx.ticketMessage.create({
+        data: {
+          ticketId,
+          kind: "INTERNAL",
+          bodyText: historyNote.slice(0, 10000),
+          authorId: session.user.id,
+          fromName: session.user.name ?? "System",
+        },
+      });
+    }
   });
-
-  const assigneeName = assigneeId
-    ? people.find((person) => person.id === assigneeId)?.name
-    : null;
 
   await notifyTicketParticipants({
     ticketId,
