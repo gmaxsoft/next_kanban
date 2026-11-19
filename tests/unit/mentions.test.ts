@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   extractMentionedUserIds,
+  findFirstInboundAssigneeUserId,
   findFirstMentionedUserId,
 } from "@/lib/mentions";
 
@@ -64,5 +65,92 @@ describe("extractMentionedUserIds first-name alias", () => {
     expect(
       extractMentionedUserIds("Ping @Grzegorz", [lukasz, grzegorz]),
     ).toEqual([grzegorz.id]);
+  });
+});
+
+describe("findFirstInboundAssigneeUserId", () => {
+  const lukaszMail = {
+    id: "u-lukasz",
+    email: "lukasz.nowak@pwginfo.pl",
+  };
+  const grzegorzMail = {
+    id: "u-grzegorz",
+    email: "grzegorz.miskow@pwginfo.pl",
+  };
+  const zbyszekMail = {
+    id: "u-zbyszek",
+    email: "zbyszek.koskowski@pwginfo.pl",
+  };
+  const grzegorzOther = {
+    id: "u-grzegorz-2",
+    email: "grzegorz.kowalski@pwginfo.pl",
+  };
+
+  it("assigns from full @user@domain mention", () => {
+    expect(
+      findFirstInboundAssigneeUserId(
+        "Proszę @grzegorz.miskow@pwginfo.pl o pomoc.",
+        [lukaszMail, grzegorzMail],
+      ),
+    ).toBe(grzegorzMail.id);
+  });
+
+  it("assigns from unique @local-part", () => {
+    expect(
+      findFirstInboundAssigneeUserId("Cześć @lukasz.nowak — drukarka.", [
+        lukaszMail,
+        grzegorzMail,
+      ]),
+    ).toBe(lukaszMail.id);
+  });
+
+  it("does not assign ambiguous local-part", () => {
+    const twin = {
+      id: "u-lukasz-2",
+      email: "lukasz.nowak@other.pl",
+    };
+    expect(
+      findFirstInboundAssigneeUserId("Do @lukasz.nowak", [
+        lukaszMail,
+        twin,
+        grzegorzMail,
+      ]),
+    ).toBeNull();
+  });
+
+  it("ignores first-name mentions", () => {
+    expect(
+      findFirstInboundAssigneeUserId("Hej @Grzegorz, potrzebuję pomocy.", [
+        lukaszMail,
+        grzegorzMail,
+      ]),
+    ).toBeNull();
+  });
+
+  it("picks the earliest email mention", () => {
+    expect(
+      findFirstInboundAssigneeUserId(
+        "Najpierw @zbyszek.koskowski potem @grzegorz.miskow@pwginfo.pl",
+        [lukaszMail, grzegorzMail, zbyszekMail],
+      ),
+    ).toBe(zbyszekMail.id);
+  });
+
+  it("prefers full email over local when both could match same user", () => {
+    expect(
+      findFirstInboundAssigneeUserId(
+        "Ping @grzegorz.miskow@pwginfo.pl dzięki",
+        [grzegorzMail, grzegorzOther],
+      ),
+    ).toBe(grzegorzMail.id);
+  });
+
+  it("requires boundary before @", () => {
+    expect(
+      findFirstInboundAssigneeUserId("nie@lukasz.nowak", [
+        lukaszMail,
+        grzegorzMail,
+      ]),
+    ).toBeNull();
   });
 });

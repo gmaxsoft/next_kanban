@@ -116,11 +116,11 @@ describe("processIncomingEmail (integration)", () => {
     expect(ticketCreate.mock.calls[0]?.[0]?.data?.assigneeId).toBeNull();
   });
 
-  it("assigns new ticket from @mention in body when team members match", async () => {
+  it("assigns new ticket from @email mention in body when team members match", async () => {
     ticketMessageFindUnique.mockResolvedValue(null);
     userFindMany.mockResolvedValue([
-      { id: "u-lukasz", name: "Łukasz Nowak" },
-      { id: "u-grzegorz", name: "Grzegorz Miśków" },
+      { id: "u-lukasz", email: "lukasz.nowak@pwginfo.pl" },
+      { id: "u-grzegorz", email: "grzegorz.miskow@pwginfo.pl" },
     ]);
     ticketCreate.mockResolvedValue({
       id: "ticket-mention",
@@ -134,7 +134,7 @@ describe("processIncomingEmail (integration)", () => {
         fromName: "Anna",
         toAddresses: ["it@pwginfo.pl"],
         subject: "Drukarka",
-        text: "Cześć, @Łukasz — nie działa drukarka w biurze.",
+        text: "Cześć, @lukasz.nowak@pwginfo.pl — nie działa drukarka w biurze.",
         html: null,
         messageId: "<msg-mention@example.com>",
       },
@@ -147,16 +147,47 @@ describe("processIncomingEmail (integration)", () => {
           teamId: "team-it",
           isActive: true,
         }),
+        select: expect.objectContaining({ id: true, email: true }),
       }),
     );
     expect(ticketCreate.mock.calls[0]?.[0]?.data?.assigneeId).toBe("u-lukasz");
   });
 
-  it("does not assign when first name is ambiguous in the team", async () => {
+  it("assigns from unique @local-part mention", async () => {
     ticketMessageFindUnique.mockResolvedValue(null);
     userFindMany.mockResolvedValue([
-      { id: "u-1", name: "Łukasz Nowak" },
-      { id: "u-2", name: "Łukasz Kowalski" },
+      { id: "u-lukasz", email: "lukasz.nowak@pwginfo.pl" },
+      { id: "u-grzegorz", email: "grzegorz.miskow@pwginfo.pl" },
+    ]);
+    ticketCreate.mockResolvedValue({
+      id: "ticket-local",
+      number: 202,
+      messages: [{ id: "msg-l" }],
+    });
+
+    await processIncomingEmail(
+      {
+        fromEmail: "anna@pwginfo.pl",
+        fromName: "Anna",
+        toAddresses: ["it@pwginfo.pl"],
+        subject: "VPN",
+        text: "Proszę @grzegorz.miskow o pomoc z VPN.",
+        html: null,
+        messageId: "<msg-local@example.com>",
+      },
+      { preferredTeamId: "team-it" },
+    );
+
+    expect(ticketCreate.mock.calls[0]?.[0]?.data?.assigneeId).toBe(
+      "u-grzegorz",
+    );
+  });
+
+  it("does not assign from first-name @mention anymore", async () => {
+    ticketMessageFindUnique.mockResolvedValue(null);
+    userFindMany.mockResolvedValue([
+      { id: "u-1", email: "lukasz.nowak@pwginfo.pl" },
+      { id: "u-2", email: "lukasz.kowalski@pwginfo.pl" },
     ]);
     ticketCreate.mockResolvedValue({
       id: "ticket-amb",

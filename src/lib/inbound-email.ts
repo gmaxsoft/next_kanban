@@ -14,7 +14,7 @@ import {
   stripTicketRef,
 } from "@/lib/tickets";
 import { sendTicketAcknowledgementEmail, ticketUrl } from "@/lib/mail";
-import { findFirstMentionedUserId } from "@/lib/mentions";
+import { findFirstInboundAssigneeUserId } from "@/lib/mentions";
 import { notifyTicketParticipants } from "@/lib/ticket-notifications";
 import { prisma } from "@/lib/prisma";
 import {
@@ -32,11 +32,11 @@ async function resolveInboundAssigneeId(
 
   const members = await prisma.user.findMany({
     where: { isActive: true, teamId },
-    select: { id: true, name: true },
+    select: { id: true, email: true },
     orderBy: { name: "asc" },
   });
 
-  return findFirstMentionedUserId(bodyText, members);
+  return findFirstInboundAssigneeUserId(bodyText, members);
 }
 
 async function tryAutoProvisionSender(
