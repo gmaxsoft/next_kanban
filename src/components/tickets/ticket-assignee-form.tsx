@@ -9,6 +9,8 @@ import {
   useTransition,
 } from "react";
 
+import { toast } from "sonner";
+
 import {
   updateTicketAssignee,
   type TicketActionState,
@@ -54,6 +56,11 @@ export function TicketAssigneeForm({
 
   const pending = actionPending || isPending;
 
+  const memberIds = useMemo(
+    () => new Set(members.map((member) => member.id)),
+    [members],
+  );
+
   const matchedMemberId = useMemo(() => {
     const byEmail = members.find(
       (member) =>
@@ -73,7 +80,9 @@ export function TicketAssigneeForm({
 
   const [requesterUserId, setRequesterUserId] = useState(matchedMemberId);
   const [assignee, setAssignee] = useState(assigneeId ?? "");
-  const [watchers, setWatchers] = useState(() => new Set(watcherIds));
+  const [watchers, setWatchers] = useState(
+    () => new Set(watcherIds.filter((id) => memberIds.has(id))),
+  );
   const [externalName, setExternalName] = useState(requestedBy);
   const [externalEmail, setExternalEmail] = useState(requesterEmail);
 
@@ -86,13 +95,33 @@ export function TicketAssigneeForm({
   }, [assigneeId]);
 
   useEffect(() => {
-    setWatchers(new Set(watcherIds));
-  }, [watcherIds]);
+    setWatchers(new Set(watcherIds.filter((id) => memberIds.has(id))));
+  }, [watcherIds, memberIds]);
 
   useEffect(() => {
     setExternalName(requestedBy);
     setExternalEmail(requesterEmail);
   }, [requestedBy, requesterEmail]);
+
+  useEffect(() => {
+    if (!state?.error) {
+      return;
+    }
+    // Autosave failed — snap UI back to last saved server values.
+    setRequesterUserId(matchedMemberId);
+    setAssignee(assigneeId ?? "");
+    setWatchers(new Set(watcherIds.filter((id) => memberIds.has(id))));
+    setExternalName(requestedBy);
+    setExternalEmail(requesterEmail);
+  }, [
+    state,
+    matchedMemberId,
+    assigneeId,
+    watcherIds,
+    memberIds,
+    requestedBy,
+    requesterEmail,
+  ]);
 
   const isExternal = !requesterUserId;
 
@@ -103,12 +132,26 @@ export function TicketAssigneeForm({
     requestedBy?: string;
     requesterEmail?: string;
   }) {
-    const nextRequesterUserId =
-      overrides.requesterUserId ?? requesterUserId;
+    const rawRequesterUserId = overrides.requesterUserId ?? requesterUserId;
+    const nextRequesterUserId = memberIds.has(rawRequesterUserId)
+      ? rawRequesterUserId
+      : "";
+    const nextWatcherIds = (overrides.watcherIds ?? [...watchers]).filter(
+      (id) => memberIds.has(id),
+    );
+    const nextAssigneeId = overrides.assigneeId ?? assignee;
+    if (nextAssigneeId && !memberIds.has(nextAssigneeId)) {
+      toast.error(
+        "Wybierz osobę z zespołu tego ticketu (odpowiedzialny / zgłaszający / obserwujący).",
+      );
+      setAssignee(assigneeId ?? "");
+      return;
+    }
+
     const fd = new FormData();
     fd.set("ticketId", ticketId);
     fd.set("requesterUserId", nextRequesterUserId);
-    fd.set("assigneeId", overrides.assigneeId ?? assignee);
+    fd.set("assigneeId", nextAssigneeId);
 
     if (nextRequesterUserId) {
       fd.set("requestedBy", overrides.requestedBy ?? requestedBy);
@@ -123,7 +166,7 @@ export function TicketAssigneeForm({
       );
     }
 
-    for (const id of overrides.watcherIds ?? [...watchers]) {
+    for (const id of nextWatcherIds) {
       fd.append("watcherIds", id);
     }
 
@@ -251,6 +294,9 @@ export function TicketAssigneeForm({
               </option>
             ))}
           </select>
+          <p className="text-xs text-muted-foreground">
+            Zapisuje się od razu po zmianie.
+          </p>
         </div>
         <fieldset className="grid min-w-60 gap-2">
           <legend className="text-sm font-medium">Obserwujący</legend>

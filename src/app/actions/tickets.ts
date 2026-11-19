@@ -343,13 +343,17 @@ export async function updateTicketAssignee(
     return deniedAssignee;
   }
 
-  const requestedIds = [
+  // Only assignee is hard-required to be on the ticket team.
+  // Invalid requester/watcher ids are dropped so an assignee autosave is not
+  // blocked by a cross-team requester match in the admin UI.
+  const assigneeIdsToCheck = assigneeId ? [assigneeId] : [];
+  const softIds = [
     ...new Set([
       ...watcherIds,
-      ...(assigneeId ? [assigneeId] : []),
       ...(requesterUserId ? [requesterUserId] : []),
     ]),
   ];
+  const requestedIds = [...new Set([...assigneeIdsToCheck, ...softIds])];
   const people = requestedIds.length
     ? await prisma.user.findMany({
         where: {
@@ -360,19 +364,21 @@ export async function updateTicketAssignee(
         select: { id: true, name: true, email: true },
       })
     : [];
-  const missingIds = missingTeamMemberIds(
-    requestedIds,
-    people.map((person) => person.id),
-  );
-  if (missingIds.length > 0) {
+  const foundIds = people.map((person) => person.id);
+  const assigneeChanged = assigneeId !== ticket.assigneeId;
+  if (
+    assigneeChanged &&
+    missingTeamMemberIds(assigneeIdsToCheck, foundIds).length > 0
+  ) {
     return {
       error:
-        "Wybierz aktywne osoby z zespołu ticketu (odpowiedzialny / zgłaszający / obserwujący).",
+        "Wybierz aktywnego odpowiedzialnego z zespołu tego ticketu.",
     };
   }
 
+  const validWatcherIds = watcherIds.filter((id) => foundIds.includes(id));
   const requesterUser = requesterUserId
-    ? people.find((person) => person.id === requesterUserId)
+    ? people.find((person) => person.id === requesterUserId) ?? null
     : null;
 
   let requestedBy = requestedByRaw;
@@ -407,7 +413,8 @@ export async function updateTicketAssignee(
   }
 
   const assigneeName = assigneeId
-    ? people.find((person) => person.id === assigneeId)?.name ?? null
+    ? people.find((person) => person.id === assigneeId)?.name ??
+      (assigneeId === ticket.assigneeId ? ticket.assignee?.name ?? null : null)
     : null;
 
   const historyNote = buildPeopleChangeHistoryNote({
@@ -442,9 +449,9 @@ export async function updateTicketAssignee(
       },
     });
     await tx.ticketWatcher.deleteMany({ where: { ticketId } });
-    if (watcherIds.length) {
+    if (validWatcherIds.length) {
       await tx.ticketWatcher.createMany({
-        data: watcherIds.map((userId) => ({ ticketId, userId })),
+        data: validWatcherIds.map((userId) => ({ ticketId, userId })),
       });
     }
     if (historyNote) {
@@ -469,8 +476,8 @@ export async function updateTicketAssignee(
       assigneeName
         ? `Odpowiedzialny: ${assigneeName}.`
         : "Odpowiedzialny: nieprzypisany.",
-      watcherIds.length
-        ? `Obserwujący: ${watcherIds.length}.`
+      validWatcherIds.length
+        ? `Obserwujący: ${validWatcherIds.length}.`
         : "Brak obserwujących.",
     ].join(" "),
   });

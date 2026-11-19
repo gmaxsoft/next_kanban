@@ -115,6 +115,20 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
     }),
   ]);
 
+  // Assignee/watchers must belong to the ticket team (server enforces this).
+  // Admins still load all users for Kanban assign, but this form is team-scoped.
+  const ticketTeamMembers = ticket.teamId
+    ? members.filter((member) => member.teamId === ticket.teamId)
+    : members;
+  const ticketPeopleIds = new Set([
+    ...ticketTeamMembers.map((member) => member.id),
+    ...(ticket.assigneeId ? [ticket.assigneeId] : []),
+    ...ticket.watchers.map((watcher) => watcher.userId),
+  ]);
+  const assigneeFormMembers = members.filter((member) =>
+    ticketPeopleIds.has(member.id),
+  );
+
   const displayId = formatTicketId(ticket.number);
   const mergeLabels = [
     displayId,
@@ -208,7 +222,7 @@ export default async function TicketDetailsPage({ params }: TicketPageProps) {
                 ticket.requesterEmail
               }
               requesterEmail={ticket.requesterEmail}
-              members={members}
+              members={assigneeFormMembers}
             />
           </CardContent>
         </Card>
