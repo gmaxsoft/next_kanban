@@ -1,5 +1,12 @@
 import { maybeAutoProvisionUserFromInbound } from "@/lib/auto-provision-user";
 import {
+  collisionExternalMessageId,
+  fingerprintsMatch,
+  inboundBodyText,
+  inboundContentFingerprint,
+  truncateExternalMessageId,
+} from "@/lib/inbound-email-dedupe";
+import {
   findTeamByInboundAddress,
   formatTicketId,
   parseEmailAddress,
@@ -266,40 +273,83 @@ export async function processIncomingEmail(
   email: IncomingEmailInput,
   options: ProcessIncomingEmailOptions = {},
 ): Promise<ProcessIncomingEmailResult> {
-  const externalMessageId =
+  const rawExternalMessageId = truncateExternalMessageId(
     email.messageId ||
-    email.externalId ||
-    `generated:${email.fromEmail}:${email.subject}:${email.text?.slice(0, 40) ?? ""}`;
-
-  const existingMessage = await prisma.ticketMessage.findUnique({
-    where: { externalMessageId },
-    select: { id: true, ticketId: true },
+      email.externalId ||
+      `generated:${email.fromEmail}:${email.subject}:${email.text?.slice(0, 40) ?? ""}`,
+  );
+  const bodyText = inboundBodyText(email);
+  const contentFingerprint = inboundContentFingerprint({
+    fromEmail: email.fromEmail,
+    subject: email.subject,
+    bodyText,
   });
 
-  if (existingMessage) {
-    await storeTicketAttachments(existingMessage.id, email.attachments);
-    const acknowledgementSent = await sendPendingTicketAcknowledgement(
-      existingMessage.ticketId,
+  const existingByRawId = await prisma.ticketMessage.findUnique({
+    where: { externalMessageId: rawExternalMessageId },
+    select: {
+      id: true,
+      ticketId: true,
+      fromEmail: true,
+      subject: true,
+      bodyText: true,
+    },
+  });
+
+  let externalMessageId = rawExternalMessageId;
+
+  if (existingByRawId) {
+    const existingFingerprint = inboundContentFingerprint({
+      fromEmail: existingByRawId.fromEmail ?? "",
+      subject: existingByRawId.subject,
+      bodyText: existingByRawId.bodyText ?? "",
+    });
+
+    if (fingerprintsMatch(existingFingerprint, contentFingerprint)) {
+      await storeTicketAttachments(existingByRawId.id, email.attachments);
+      const acknowledgementSent = await sendPendingTicketAcknowledgement(
+        existingByRawId.ticketId,
+      );
+      return {
+        ticketId: existingByRawId.ticketId,
+        created: false,
+        duplicate: true,
+        taskCreated: false,
+        acknowledgementSent,
+      };
+    }
+
+    // Same Message-ID / external id, different content → sender-side collision.
+    externalMessageId = collisionExternalMessageId(
+      rawExternalMessageId,
+      contentFingerprint,
     );
-    return {
-      ticketId: existingMessage.ticketId,
-      created: false,
-      duplicate: true,
-      taskCreated: false,
-      acknowledgementSent,
-    };
+    console.warn(
+      `[inbound-email] kolizja Message-ID „${rawExternalMessageId}” — treść inna niż w ticket message ${existingByRawId.id}; zapisuję jako ${externalMessageId}`,
+    );
+
+    const existingCollision = await prisma.ticketMessage.findUnique({
+      where: { externalMessageId },
+      select: { id: true, ticketId: true },
+    });
+    if (existingCollision) {
+      await storeTicketAttachments(existingCollision.id, email.attachments);
+      const acknowledgementSent = await sendPendingTicketAcknowledgement(
+        existingCollision.ticketId,
+      );
+      return {
+        ticketId: existingCollision.ticketId,
+        created: false,
+        duplicate: true,
+        taskCreated: false,
+        acknowledgementSent,
+      };
+    }
   }
 
   const ticketNumber = parseTicketRef(email.subject);
   const matchedTeam = await findTeamByInboundAddress(email.toAddresses);
   const teamId = options.preferredTeamId ?? matchedTeam?.id ?? null;
-
-  const bodyText =
-    email.text?.trim() ||
-    (email.html
-      ? email.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
-      : "") ||
-    "(brak treści)";
 
   if (ticketNumber) {
     const matchedByNumber = await prisma.ticket.findUnique({

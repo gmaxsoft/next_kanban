@@ -180,10 +180,13 @@ describe("processIncomingEmail (integration)", () => {
     expect(ticketCreate.mock.calls[0]?.[0]?.data?.assigneeId).toBeNull();
   });
 
-  it("returns duplicate when Message-ID already exists", async () => {
+  it("returns duplicate when Message-ID already exists with same content", async () => {
     ticketMessageFindUnique.mockResolvedValue({
       id: "m1",
       ticketId: "ticket-existing",
+      fromEmail: "klient@example.com",
+      subject: "Problem",
+      bodyText: "treść",
     });
 
     const result = await processIncomingEmail({
@@ -203,6 +206,44 @@ describe("processIncomingEmail (integration)", () => {
       taskCreated: false,
     });
     expect(ticketCreate).not.toHaveBeenCalled();
+  });
+
+  it("creates a new ticket when Message-ID collides but content differs", async () => {
+    ticketMessageFindUnique
+      .mockResolvedValueOnce({
+        id: "m-old",
+        ticketId: "ticket-t178",
+        fromEmail: "other@pwginfo.pl",
+        subject: "Stary temat",
+        bodyText: "Stara treść T-178",
+      })
+      .mockResolvedValueOnce(null);
+    ticketCreate.mockResolvedValue({
+      id: "ticket-new",
+      number: 250,
+      messages: [{ id: "msg-new" }],
+    });
+
+    const result = await processIncomingEmail({
+      fromEmail: "iod@pwginfo.pl",
+      fromName: "IOD",
+      toAddresses: ["it@pwginfo.pl"],
+      subject: "Nowe zgłoszenie RODO",
+      text: "Proszę o pomoc w sprawie X",
+      html: null,
+      messageId: "<same-id-as-t178@pwginfo.pl>",
+    });
+
+    expect(result).toMatchObject({
+      ticketId: "ticket-new",
+      created: true,
+      duplicate: false,
+    });
+    expect(ticketCreate).toHaveBeenCalledOnce();
+    const storedId =
+      ticketCreate.mock.calls[0]?.[0]?.data?.messages?.create?.externalMessageId;
+    expect(storedId).toMatch(/^<same-id-as-t178@pwginfo\.pl>#[0-9a-f]{16}$/);
+    expect(storedId).not.toBe("<same-id-as-t178@pwginfo.pl>");
   });
 
   it("appends to an existing ticket when subject contains [T-n]", async () => {
