@@ -6,7 +6,7 @@ import {
 } from "@/lib/ticket-attachments";
 
 describe("email signature attachment noise filter", () => {
-  it("filters Outlook signature images by name", () => {
+  it("filters Outlook signature images image001–image004 only", () => {
     expect(
       isEmailSignatureNoiseAttachment({
         filename: "image001.png",
@@ -21,13 +21,19 @@ describe("email signature attachment noise filter", () => {
     ).toBe(true);
     expect(
       isEmailSignatureNoiseAttachment({
-        filename: "IMAGE010.GIF",
+        filename: "IMAGE003.GIF",
         contentType: "image/gif",
+      }),
+    ).toBe(true);
+    expect(
+      isEmailSignatureNoiseAttachment({
+        filename: "image004.webp",
+        contentType: "image/webp",
       }),
     ).toBe(true);
   });
 
-  it("keeps real attachments", () => {
+  it("keeps real attachments including image005+", () => {
     expect(
       isEmailSignatureNoiseAttachment({
         filename: "faktura.pdf",
@@ -44,6 +50,18 @@ describe("email signature attachment noise filter", () => {
       isEmailSignatureNoiseAttachment({
         filename: "logo-firmy.png",
         contentType: "image/png",
+      }),
+    ).toBe(false);
+    expect(
+      isEmailSignatureNoiseAttachment({
+        filename: "image005.png",
+        contentType: "image/png",
+      }),
+    ).toBe(false);
+    expect(
+      isEmailSignatureNoiseAttachment({
+        filename: "IMAGE010.GIF",
+        contentType: "image/gif",
       }),
     ).toBe(false);
   });

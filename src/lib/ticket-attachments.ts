@@ -7,11 +7,12 @@ export const TICKET_UPLOAD_ACCEPT =
   ".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.zip,.txt,application/pdf,image/*,application/zip";
 
 /**
- * Filtruje typowe obrazki ze stopek / podpisów maili (Outlook itd.),
- * które trafiają jako załączniki (np. image001.png, image002.png).
+ * Filtruje obrazki ze stopek / podpisów maili (Outlook itd.).
+ * Tylko image001–image004 — wyższe numery (np. image005.png) mogą być
+ * prawdziwymi załącznikami od użytkownika.
  */
 const SIGNATURE_IMAGE_NAME =
-  /^(image\d{3}|outlook-[0-9a-f-]+)\.(png|jpe?g|gif|bmp|webp)$/i;
+  /^(image00[1-4]|outlook-[0-9a-f-]+)\.(png|jpe?g|gif|bmp|webp)$/i;
 
 export function isEmailSignatureNoiseAttachment(input: {
   filename?: string | null;
