@@ -7,6 +7,7 @@ import {
   replyToTicket,
   type TicketActionState,
 } from "@/app/actions/tickets";
+import { TicketMessageAttachmentsField } from "@/components/tickets/ticket-message-attachments-field";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
@@ -69,6 +70,10 @@ export function TicketReplyForm({
             minHeightClassName="min-h-40"
           />
         </div>
+        <TicketMessageAttachmentsField
+          key={`reply-files-${replyEditorKey}`}
+          disabled={replyPending}
+        />
         <Button type="submit" disabled={replyPending} className="w-fit">
           {replyPending ? "Wysyłanie..." : "Wyślij e-mail"}
         </Button>
@@ -79,8 +84,9 @@ export function TicketReplyForm({
         <div>
           <h3 className="text-sm font-semibold">Notatka wewnętrzna</h3>
           <p className="text-xs text-muted-foreground">
-            Widoczna tylko w panelu — bez wysyłki do klienta. Możesz wkleić
-            zdjęcie (Ctrl+V) lub dodać je z paska. Użyj @, aby oznaczyć osobę.
+            Widoczna tylko w panelu — bez wysyłki do klienta. Możesz dodać
+            kilka załączników, wkleić zdjęcie (Ctrl+V) lub użyć @, aby oznaczyć
+            osobę.
           </p>
         </div>
         <div className="grid gap-2">
@@ -96,6 +102,10 @@ export function TicketReplyForm({
             minHeightClassName="min-h-40"
           />
         </div>
+        <TicketMessageAttachmentsField
+          key={`note-files-${noteEditorKey}`}
+          disabled={notePending}
+        />
         <Button
           type="submit"
           variant="secondary"

@@ -1,3 +1,11 @@
+/** Limits shared by UI + server for outbound/note uploads. */
+export const TICKET_UPLOAD_MAX_FILES = 20;
+export const TICKET_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
+export const TICKET_UPLOAD_MAX_MESSAGE_BYTES = 40 * 1024 * 1024;
+
+export const TICKET_UPLOAD_ACCEPT =
+  ".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.zip,.txt,application/pdf,image/*,application/zip";
+
 /**
  * Filtruje typowe obrazki ze stopek / podpisów maili (Outlook itd.),
  * które trafiają jako załączniki (np. image001.png, image002.png).

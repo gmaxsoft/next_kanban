@@ -172,6 +172,11 @@ export async function sendTicketReplyEmail(input: {
   smtpHost: string;
   smtpUser: string;
   smtpPassword: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer | Uint8Array;
+    contentType?: string | null;
+  }>;
 }) {
   const transporter = createSmtpTransport(input);
   const href = ticketUrl(input.ticketId);
@@ -195,6 +200,11 @@ export async function sendTicketReplyEmail(input: {
       subject: input.subject,
       text,
       html,
+      attachments: input.attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        content: Buffer.from(attachment.content),
+        contentType: attachment.contentType || undefined,
+      })),
     });
   } finally {
     transporter.close();

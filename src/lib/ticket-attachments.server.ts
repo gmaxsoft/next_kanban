@@ -3,11 +3,12 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { prisma } from "./prisma";
-import { isEmailSignatureNoiseAttachment } from "./ticket-attachments";
-
-const MAX_ATTACHMENT_FILES = 20;
-const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
-const MAX_MESSAGE_ATTACHMENT_BYTES = 40 * 1024 * 1024;
+import {
+  isEmailSignatureNoiseAttachment,
+  TICKET_UPLOAD_MAX_BYTES,
+  TICKET_UPLOAD_MAX_FILES,
+  TICKET_UPLOAD_MAX_MESSAGE_BYTES,
+} from "./ticket-attachments";
 
 export type IncomingTicketAttachment = {
   filename?: string | null;
@@ -37,6 +38,55 @@ function safeMimeType(contentType: string | null | undefined) {
     : "application/octet-stream";
 }
 
+export async function collectTicketUploadFiles(
+  formData: FormData,
+  fieldName = "files",
+): Promise<
+  | { ok: true; attachments: IncomingTicketAttachment[] }
+  | { ok: false; error: string }
+> {
+  const entries = formData.getAll(fieldName);
+  const attachments: IncomingTicketAttachment[] = [];
+  let totalBytes = 0;
+
+  for (const entry of entries) {
+    if (!(entry instanceof File) || entry.size <= 0) {
+      continue;
+    }
+
+    if (attachments.length >= TICKET_UPLOAD_MAX_FILES) {
+      return {
+        ok: false,
+        error: `Maksymalnie ${TICKET_UPLOAD_MAX_FILES} załączników naraz.`,
+      };
+    }
+
+    if (entry.size > TICKET_UPLOAD_MAX_BYTES) {
+      return {
+        ok: false,
+        error: `Plik „${entry.name}” przekracza limit 20 MB.`,
+      };
+    }
+
+    if (totalBytes + entry.size > TICKET_UPLOAD_MAX_MESSAGE_BYTES) {
+      return {
+        ok: false,
+        error: "Łączny rozmiar załączników przekracza 40 MB.",
+      };
+    }
+
+    const content = new Uint8Array(await entry.arrayBuffer());
+    attachments.push({
+      filename: entry.name,
+      contentType: entry.type || null,
+      content,
+    });
+    totalBytes += entry.size;
+  }
+
+  return { ok: true, attachments };
+}
+
 export async function storeTicketAttachments(
   messageId: string,
   attachments: IncomingTicketAttachment[] = [],
@@ -62,9 +112,9 @@ export async function storeTicketAttachments(
     }
 
     if (
-      storedCount >= MAX_ATTACHMENT_FILES ||
-      content.length > MAX_ATTACHMENT_BYTES ||
-      storedBytes + content.length > MAX_MESSAGE_ATTACHMENT_BYTES
+      storedCount >= TICKET_UPLOAD_MAX_FILES ||
+      content.length > TICKET_UPLOAD_MAX_BYTES ||
+      storedBytes + content.length > TICKET_UPLOAD_MAX_MESSAGE_BYTES
     ) {
       console.warn(
         `[ticket-attachments] skipped oversized/excess attachment for message=${messageId}`,

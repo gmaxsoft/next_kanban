@@ -34,6 +34,10 @@ import {
   missingTeamMemberIds,
 } from "@/lib/ticket-assignment";
 import {
+  collectTicketUploadFiles,
+  storeTicketAttachments,
+} from "@/lib/ticket-attachments.server";
+import {
   canUserAccessTicket,
   findTodoColumn,
   formatTicketId,
@@ -501,6 +505,10 @@ export async function addTicketInternalNote(
     .getAll("mentionedIds")
     .map(String)
     .filter(Boolean);
+  const uploads = await collectTicketUploadFiles(formData);
+  if (!uploads.ok) {
+    return { error: uploads.error };
+  }
 
   if (!ticketId || isEmptyRichText(bodyHtml)) {
     return { error: "Wpisz treść notatki." };
@@ -549,7 +557,7 @@ export async function addTicketInternalNote(
     explicitMentionIds,
   );
 
-  await prisma.ticketMessage.create({
+  const createdNote = await prisma.ticketMessage.create({
     data: {
       ticketId,
       kind: "INTERNAL",
@@ -564,7 +572,10 @@ export async function addTicketInternalNote(
             }
           : undefined,
     },
+    select: { id: true },
   });
+
+  await storeTicketAttachments(createdNote.id, uploads.attachments);
 
   const reopenToInProgress =
     ticket.status === "RESOLVED" ||
@@ -861,6 +872,10 @@ export async function replyToTicket(
   const ticketId = String(formData.get("ticketId") ?? "");
   const bodyHtml = normalizeRichTextInput(String(formData.get("body") ?? ""));
   const body = plainTextFromHtml(bodyHtml);
+  const uploads = await collectTicketUploadFiles(formData);
+  if (!uploads.ok) {
+    return { error: uploads.error };
+  }
 
   if (!ticketId || isEmptyRichText(bodyHtml)) {
     return { error: "Wpisz treść odpowiedzi." };
@@ -914,13 +929,18 @@ export async function replyToTicket(
       smtpHost: ticket.team.imapHost.replace(/^imap\./i, "smtp."),
       smtpUser: ticket.team.imapUser,
       smtpPassword: ticket.team.imapPassword,
+      attachments: uploads.attachments.map((attachment) => ({
+        filename: attachment.filename || "zalacznik",
+        content: attachment.content,
+        contentType: attachment.contentType,
+      })),
     });
   } catch (error) {
     console.error("[tickets] reply email failed", error);
     return { error: "Nie udało się wysłać e-maila z odpowiedzią." };
   }
 
-  await prisma.ticketMessage.create({
+  const createdReply = await prisma.ticketMessage.create({
     data: {
       ticketId,
       kind: "OUTBOUND",
@@ -931,7 +951,10 @@ export async function replyToTicket(
       bodyHtml,
       authorId: session.user.id,
     },
+    select: { id: true },
   });
+
+  await storeTicketAttachments(createdReply.id, uploads.attachments);
 
   await prisma.ticket.update({
     where: { id: ticketId },
