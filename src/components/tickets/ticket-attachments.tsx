@@ -101,7 +101,7 @@ export function TicketAttachments({
 
   return (
     <section
-      className={compact ? "mt-3 border-t pt-3" : undefined}
+      className={compact ? "mt-3 border-t pt-3" : "mt-4 border-t pt-3"}
       aria-label="Załączniki"
     >
       <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">

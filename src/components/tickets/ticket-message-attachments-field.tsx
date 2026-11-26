@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  forwardRef,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { Paperclip, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -13,32 +19,49 @@ import {
 } from "@/lib/ticket-attachments";
 import { cn } from "@/lib/utils";
 
-function syncInputFiles(input: HTMLInputElement, files: File[]) {
-  const transfer = new DataTransfer();
-  for (const file of files) {
-    transfer.items.add(file);
+export type TicketMessageAttachmentsFieldHandle = {
+  getFiles: () => File[];
+  clear: () => void;
+};
+
+/** Append selected files into FormData for server actions (avoids brittle input.files sync). */
+export function appendTicketUploadFiles(
+  formData: FormData,
+  handle: TicketMessageAttachmentsFieldHandle | null | undefined,
+) {
+  formData.delete("files");
+  for (const file of handle?.getFiles() ?? []) {
+    formData.append("files", file);
   }
-  input.files = transfer.files;
+  return formData;
 }
 
-export function TicketMessageAttachmentsField({
-  disabled = false,
-  className,
-}: {
-  disabled?: boolean;
-  className?: string;
-}) {
+export const TicketMessageAttachmentsField = forwardRef<
+  TicketMessageAttachmentsFieldHandle,
+  {
+    disabled?: boolean;
+    className?: string;
+  }
+>(function TicketMessageAttachmentsField(
+  { disabled = false, className },
+  ref,
+) {
   const reactId = useId();
   const inputId = `ticket-files-${reactId}`;
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (inputRef.current) {
-      syncInputFiles(inputRef.current, files);
-    }
-  }, [files]);
+  useImperativeHandle(ref, () => ({
+    getFiles: () => files,
+    clear: () => {
+      setFiles([]);
+      setError(null);
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+    },
+  }));
 
   function addFiles(list: FileList | null) {
     if (!list?.length) {
@@ -104,10 +127,10 @@ export function TicketMessageAttachmentsField({
           Można wybrać kilka plików (max {TICKET_UPLOAD_MAX_FILES}, 20 MB
           każdy).
         </span>
+        {/* Picker only — files are appended to FormData from React state on submit. */}
         <input
           ref={inputRef}
           id={inputId}
-          name="files"
           type="file"
           multiple
           disabled={disabled}
@@ -148,4 +171,4 @@ export function TicketMessageAttachmentsField({
       ) : null}
     </div>
   );
-}
+});

@@ -1,12 +1,17 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import {
   deleteTicketInternalNote,
   editTicketInternalNote,
   type TicketActionState,
 } from "@/app/actions/tickets";
+import {
+  appendTicketUploadFiles,
+  TicketMessageAttachmentsField,
+  type TicketMessageAttachmentsFieldHandle,
+} from "@/components/tickets/ticket-message-attachments-field";
 import { Button } from "@/components/ui/button";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { RichTextContent } from "@/components/ui/rich-text-content";
@@ -36,12 +41,17 @@ export function TicketInternalNote({
     FormData
   >(deleteTicketInternalNote, null);
   const [editing, setEditing] = useState(false);
+  const [editKey, setEditKey] = useState(0);
+  const filesRef = useRef<TicketMessageAttachmentsFieldHandle>(null);
 
   useActionToast(state);
   useActionToast(deleteState);
 
   useEffect(() => {
-    if (state?.success) setEditing(false);
+    if (state?.success) {
+      setEditing(false);
+      setEditKey((key) => key + 1);
+    }
   }, [state]);
 
   const displayValue = bodyHtml?.trim() ? bodyHtml : bodyText;
@@ -91,9 +101,16 @@ export function TicketInternalNote({
   }
 
   return (
-    <form action={formAction} className="grid gap-2 overflow-visible">
+    <form
+      action={(formData) => {
+        appendTicketUploadFiles(formData, filesRef.current);
+        formAction(formData);
+      }}
+      className="grid gap-2 overflow-visible"
+    >
       <input type="hidden" name="messageId" value={messageId} />
       <RichTextEditor
+        key={`note-edit-${editKey}`}
         name="body"
         heightStorageKey="ticket-internal-note-edit"
         enableImages
@@ -102,6 +119,11 @@ export function TicketInternalNote({
         placeholder="Notatka dla zespołu… wklej zdjęcie lub napisz @Imię"
         minHeightClassName="min-h-32"
         className="z-20"
+      />
+      <TicketMessageAttachmentsField
+        key={`note-edit-files-${editKey}`}
+        ref={filesRef}
+        disabled={pending}
       />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="sm" disabled={pending} className="w-fit">

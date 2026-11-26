@@ -1,13 +1,17 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import {
   addTicketInternalNote,
   replyToTicket,
   type TicketActionState,
 } from "@/app/actions/tickets";
-import { TicketMessageAttachmentsField } from "@/components/tickets/ticket-message-attachments-field";
+import {
+  appendTicketUploadFiles,
+  TicketMessageAttachmentsField,
+  type TicketMessageAttachmentsFieldHandle,
+} from "@/components/tickets/ticket-message-attachments-field";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
@@ -32,6 +36,8 @@ export function TicketReplyForm({
   >(addTicketInternalNote, null);
   const [replyEditorKey, setReplyEditorKey] = useState(0);
   const [noteEditorKey, setNoteEditorKey] = useState(0);
+  const replyFilesRef = useRef<TicketMessageAttachmentsFieldHandle>(null);
+  const noteFilesRef = useRef<TicketMessageAttachmentsFieldHandle>(null);
 
   useActionToast(replyState);
   useActionToast(noteState);
@@ -50,7 +56,13 @@ export function TicketReplyForm({
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <form action={replyAction} className="grid gap-3 rounded-xl border p-4">
+      <form
+        action={(formData) => {
+          appendTicketUploadFiles(formData, replyFilesRef.current);
+          replyAction(formData);
+        }}
+        className="grid gap-3 rounded-xl border p-4"
+      >
         <input type="hidden" name="ticketId" value={ticketId} />
         <div>
           <h3 className="text-sm font-semibold">Odpowiedź do klienta</h3>
@@ -72,6 +84,7 @@ export function TicketReplyForm({
         </div>
         <TicketMessageAttachmentsField
           key={`reply-files-${replyEditorKey}`}
+          ref={replyFilesRef}
           disabled={replyPending}
         />
         <Button type="submit" disabled={replyPending} className="w-fit">
@@ -79,7 +92,13 @@ export function TicketReplyForm({
         </Button>
       </form>
 
-      <form action={noteAction} className="grid gap-3 rounded-xl border p-4">
+      <form
+        action={(formData) => {
+          appendTicketUploadFiles(formData, noteFilesRef.current);
+          noteAction(formData);
+        }}
+        className="grid gap-3 rounded-xl border p-4"
+      >
         <input type="hidden" name="ticketId" value={ticketId} />
         <div>
           <h3 className="text-sm font-semibold">Notatka wewnętrzna</h3>
@@ -104,6 +123,7 @@ export function TicketReplyForm({
         </div>
         <TicketMessageAttachmentsField
           key={`note-files-${noteEditorKey}`}
+          ref={noteFilesRef}
           disabled={notePending}
         />
         <Button

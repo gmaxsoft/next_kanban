@@ -510,8 +510,11 @@ export async function addTicketInternalNote(
     return { error: uploads.error };
   }
 
-  if (!ticketId || isEmptyRichText(bodyHtml)) {
-    return { error: "Wpisz treść notatki." };
+  if (
+    !ticketId ||
+    (isEmptyRichText(bodyHtml) && uploads.attachments.length === 0)
+  ) {
+    return { error: "Wpisz treść notatki lub dodaj załącznik." };
   }
 
   const ticket = await prisma.ticket.findUnique({
@@ -557,12 +560,20 @@ export async function addTicketInternalNote(
     explicitMentionIds,
   );
 
+  const noteBodyHtml = isEmptyRichText(bodyHtml)
+    ? "<p>(załącznik)</p>"
+    : bodyHtml;
+  const noteBodyText = (
+    body ||
+    (uploads.attachments.length > 0 ? "(załącznik)" : "(zdjęcie)")
+  ).slice(0, 10000);
+
   const createdNote = await prisma.ticketMessage.create({
     data: {
       ticketId,
       kind: "INTERNAL",
-      bodyText: (body || "(zdjęcie)").slice(0, 10000),
-      bodyHtml,
+      bodyText: noteBodyText,
+      bodyHtml: noteBodyHtml,
       authorId: session.user.id,
       fromName: session.user.name ?? "Administrator",
       mentions:
@@ -682,9 +693,16 @@ export async function editTicketInternalNote(
     .getAll("mentionedIds")
     .map(String)
     .filter(Boolean);
+  const uploads = await collectTicketUploadFiles(formData);
+  if (!uploads.ok) {
+    return { error: uploads.error };
+  }
 
-  if (!messageId || isEmptyRichText(bodyHtml)) {
-    return { error: "Wpisz treść notatki." };
+  if (
+    !messageId ||
+    (isEmptyRichText(bodyHtml) && uploads.attachments.length === 0)
+  ) {
+    return { error: "Wpisz treść notatki lub dodaj załącznik." };
   }
 
   const message = await prisma.ticketMessage.findUnique({
@@ -748,13 +766,21 @@ export async function editTicketInternalNote(
     (userId) => !previousMentionIds.has(userId),
   );
 
+  const noteBodyHtml = isEmptyRichText(bodyHtml)
+    ? "<p>(załącznik)</p>"
+    : bodyHtml;
+  const noteBodyText = (
+    body ||
+    (uploads.attachments.length > 0 ? "(załącznik)" : "(zdjęcie)")
+  ).slice(0, 10000);
+
   await prisma.$transaction([
     prisma.ticketMessageMention.deleteMany({ where: { messageId } }),
     prisma.ticketMessage.update({
       where: { id: messageId },
       data: {
-        bodyText: (body || "(zdjęcie)").slice(0, 10000),
-        bodyHtml,
+        bodyText: noteBodyText,
+        bodyHtml: noteBodyHtml,
         mentions:
           mentionedIds.length > 0
             ? { create: mentionedIds.map((userId) => ({ userId })) }
@@ -762,6 +788,8 @@ export async function editTicketInternalNote(
       },
     }),
   ]);
+
+  await storeTicketAttachments(messageId, uploads.attachments);
 
   const ticket = message.ticket;
   const displayId = formatTicketId(ticket.number);
@@ -776,7 +804,7 @@ export async function editTicketInternalNote(
       newlyMentionedMembers.map((member) => member.id),
       {
         title: `Wspomniano Cię · ${displayId}`,
-        body: `${session.user.name ?? "Członek zespołu"}: ${body.slice(0, 120)}`,
+        body: `${session.user.name ?? "Członek zespołu"}: ${noteBodyText.slice(0, 120)}`,
         href,
       },
     );
@@ -800,7 +828,7 @@ export async function editTicketInternalNote(
           smtpUser: team.imapUser!,
           smtpPassword: team.imapPassword!,
           subject: `Wspomniano Cię w zgłoszeniu ${displayId}`,
-          body: `${session.user.name ?? "Członek zespołu"} wspomniał(a) Cię w notatce zgłoszenia ${displayId} („${ticket.subject}”):\n\n${body.slice(0, 500)}`,
+          body: `${session.user.name ?? "Członek zespołu"} wspomniał(a) Cię w notatce zgłoszenia ${displayId} („${ticket.subject}”):\n\n${noteBodyText.slice(0, 500)}`,
           actionUrl: absoluteAppUrl(href),
           actionLabel: "Otwórz zgłoszenie",
           ticketDisplayId: displayId,
@@ -877,8 +905,11 @@ export async function replyToTicket(
     return { error: uploads.error };
   }
 
-  if (!ticketId || isEmptyRichText(bodyHtml)) {
-    return { error: "Wpisz treść odpowiedzi." };
+  if (
+    !ticketId ||
+    (isEmptyRichText(bodyHtml) && uploads.attachments.length === 0)
+  ) {
+    return { error: "Wpisz treść odpowiedzi lub dodaj załącznik." };
   }
 
   const ticket = await prisma.ticket.findUnique({
@@ -911,6 +942,14 @@ export async function replyToTicket(
     return { error: "Brak skonfigurowanej skrzynki e-mail dla tego zespołu." };
   }
 
+  const replyBodyHtml = isEmptyRichText(bodyHtml)
+    ? "<p>(załącznik)</p>"
+    : bodyHtml;
+  const replyBodyText = (
+    body ||
+    (uploads.attachments.length > 0 ? "(załącznik)" : "")
+  ).slice(0, 10000);
+
   const subject = ticketSubjectWithRef(ticket.number, ticket.subject);
   const recipient = await resolveTicketReplyRecipient(ticket);
   const displayId = formatTicketId(ticket.number);
@@ -923,8 +962,8 @@ export async function replyToTicket(
       ticketId: ticket.id,
       displayId,
       subject,
-      body,
-      bodyHtml,
+      body: replyBodyText,
+      bodyHtml: replyBodyHtml,
       inboundEmail: ticket.team.inboundEmail,
       smtpHost: ticket.team.imapHost.replace(/^imap\./i, "smtp."),
       smtpUser: ticket.team.imapUser,
@@ -947,8 +986,8 @@ export async function replyToTicket(
       fromEmail: ticket.team.inboundEmail,
       fromName: session.user.name ?? "HelpDesk",
       subject,
-      bodyText: body.slice(0, 10000),
-      bodyHtml,
+      bodyText: replyBodyText,
+      bodyHtml: replyBodyHtml,
       authorId: session.user.id,
     },
     select: { id: true },
